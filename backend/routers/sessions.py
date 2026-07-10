@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.services.access import current_user_id, require_owned_session
-from backend.services.auth import require_csrf, require_current_user
+from backend.services.auth import require_business_csrf, require_current_user
 from backend.services.database import (
     create_session,
     delete_session,
@@ -26,7 +26,7 @@ class SessionCreate(BaseModel):
     name: str = "新对话"
 
 
-@router.post("/", dependencies=[Depends(require_csrf)])
+@router.post("/", dependencies=[Depends(require_business_csrf)])
 def new_session(
     data: SessionCreate,
     current_user: dict = Depends(require_current_user),
@@ -72,7 +72,7 @@ class RenameRequest(BaseModel):
     name: str
 
 
-@router.put("/{session_id}/rename", dependencies=[Depends(require_csrf)])
+@router.put("/{session_id}/rename", dependencies=[Depends(require_business_csrf)])
 def rename(
     session_id: int,
     req: RenameRequest,
@@ -88,7 +88,7 @@ def rename(
     return {"ok": True, "name": name}
 
 
-@router.delete("/{session_id}", dependencies=[Depends(require_csrf)])
+@router.delete("/{session_id}", dependencies=[Depends(require_business_csrf)])
 def remove_session(
     session_id: int,
     current_user: dict = Depends(require_current_user),

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.services.access import require_owned_message
-from backend.services.auth import require_csrf, require_current_user
+from backend.services.auth import require_business_csrf, require_current_user
 from backend.services.database import set_message_feedback
 
 
@@ -16,7 +16,7 @@ class FeedbackRequest(BaseModel):
     feedback: Literal["like", "dislike"]
 
 
-@router.post("/", dependencies=[Depends(require_csrf)])
+@router.post("/", dependencies=[Depends(require_business_csrf)])
 def submit_feedback(
     req: FeedbackRequest,
     current_user: dict = Depends(require_current_user),

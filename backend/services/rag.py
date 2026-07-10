@@ -13,6 +13,11 @@ os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
 _collection_cache = {}
 
+
+def rag_disabled() -> bool:
+    """Allow deterministic CI smoke tests without loading an embedding model."""
+    return os.getenv("RAG_DISABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+
 # 分块参数（可从环境变量覆盖）
 DEFAULT_CHUNK_SIZE = int(os.getenv('RAG_CHUNK_SIZE', '500'))
 DEFAULT_CHUNK_OVERLAP = int(os.getenv('RAG_CHUNK_OVERLAP', '100'))
@@ -239,6 +244,9 @@ def build_rag_context(question, user_id: int, top_k=10):
       - context_text: 带 [来源N] 标记的上下文
       - sources_list: [{id, source, title}, ...]
     """
+    if rag_disabled():
+        return "", []
+
     results = search_with_metadata(question, user_id, top_k)
     if not results:
         return "", []

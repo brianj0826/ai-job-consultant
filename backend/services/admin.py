@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from backend.services.database import (
     ROLE_ADMIN,
@@ -13,6 +17,7 @@ from backend.services.database import (
     VALID_ROLES,
     VALID_STATUSES,
     get_connection,
+    hash_password,
 )
 
 
@@ -73,6 +78,7 @@ def _user_summary(row: Mapping[str, Any]) -> dict[str, Any]:
         "username": row["username"],
         "role": row["role"],
         "status": row["status"],
+        "must_change_password": bool(row.get("must_change_password", False)),
         "last_login_at": row.get("last_login_at"),
         "created_at": row.get("created_at"),
     }
@@ -115,6 +121,7 @@ def record_admin_auth_event(
 
 def get_overview() -> dict[str, Any]:
     """Return privacy-preserving aggregate counts for the admin dashboard."""
+    day_start_utc, day_end_utc = _business_day_utc_bounds()
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -123,10 +130,18 @@ def get_overview() -> dict[str, Any]:
                        COUNT(*) AS total_users,
                        COALESCE(SUM(CASE WHEN status = %s THEN 1 ELSE 0 END), 0) AS active_users,
                        COALESCE(SUM(CASE WHEN role IN (%s, %s) THEN 1 ELSE 0 END), 0) AS administrators,
-                       COALESCE(SUM(CASE WHEN DATE(created_at) = UTC_DATE() THEN 1 ELSE 0 END), 0) AS new_users_today,
-                       COALESCE(SUM(CASE WHEN DATE(last_login_at) = UTC_DATE() THEN 1 ELSE 0 END), 0) AS logins_today
+                       COALESCE(SUM(CASE WHEN created_at >= %s AND created_at < %s THEN 1 ELSE 0 END), 0) AS new_users_today,
+                       COALESCE(SUM(CASE WHEN last_login_at >= %s AND last_login_at < %s THEN 1 ELSE 0 END), 0) AS logins_today
                    FROM users""",
-                (STATUS_ACTIVE, ROLE_ADMIN, ROLE_SUPER_ADMIN),
+                (
+                    STATUS_ACTIVE,
+                    ROLE_ADMIN,
+                    ROLE_SUPER_ADMIN,
+                    day_start_utc,
+                    day_end_utc,
+                    day_start_utc,
+                    day_end_utc,
+                ),
             )
             users = cursor.fetchone()
             cursor.execute("SELECT COUNT(*) AS total_sessions FROM sessions")
@@ -167,6 +182,26 @@ def get_overview() -> dict[str, Any]:
         conn.close()
 
 
+def _business_day_utc_bounds() -> tuple[datetime, datetime]:
+    timezone_name = os.getenv("BUSINESS_TIMEZONE", "Asia/Shanghai").strip()
+    try:
+        business_tz = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise AdminActionError(f"Invalid BUSINESS_TIMEZONE: {timezone_name}", 500) from exc
+    now = datetime.now(timezone.utc).astimezone(business_tz)
+    start_local = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=1)
+    return (
+        start_local.astimezone(timezone.utc).replace(tzinfo=None),
+        end_local.astimezone(timezone.utc).replace(tzinfo=None),
+    )
+
+
+def validate_admin_configuration() -> None:
+    """Validate timezone data during startup instead of on the first dashboard call."""
+    _business_day_utc_bounds()
+
+
 def list_users(page: int, page_size: int, search: Optional[str] = None) -> dict[str, Any]:
     """List users with only the aggregate usage data needed for management."""
     page, page_size, offset = _pagination(page, page_size)
@@ -183,14 +218,20 @@ def list_users(page: int, page_size: int, search: Optional[str] = None) -> dict[
             cursor.execute(f"SELECT COUNT(*) AS total FROM users AS u {where_clause}", tuple(params))
             total = cursor.fetchone()["total"]
             cursor.execute(
-                f"""SELECT u.id, u.username, u.role, u.status, u.last_login_at, u.created_at,
-                           COUNT(DISTINCT s.id) AS session_count,
-                           COUNT(DISTINCT m.id) AS message_count
+                f"""SELECT u.id, u.username, u.role, u.status, u.must_change_password,
+                           u.last_login_at, u.created_at,
+                           COALESCE(s.session_count, 0) AS session_count,
+                           COALESCE(m.message_count, 0) AS message_count
                     FROM users AS u
-                    LEFT JOIN sessions AS s ON s.user_id = u.id
-                    LEFT JOIN messages AS m ON m.user_id = u.id
+                    LEFT JOIN (
+                        SELECT user_id, COUNT(*) AS session_count
+                        FROM sessions GROUP BY user_id
+                    ) AS s ON s.user_id = u.id
+                    LEFT JOIN (
+                        SELECT user_id, COUNT(*) AS message_count
+                        FROM messages GROUP BY user_id
+                    ) AS m ON m.user_id = u.id
                     {where_clause}
-                    GROUP BY u.id, u.username, u.role, u.status, u.last_login_at, u.created_at
                     ORDER BY u.id DESC
                     LIMIT %s OFFSET %s""",
                 tuple(params + [page_size, offset]),
@@ -215,7 +256,8 @@ def list_users(page: int, page_size: int, search: Optional[str] = None) -> dict[
 
 def _locked_user(cursor, user_id: int) -> Optional[dict[str, Any]]:
     cursor.execute(
-        """SELECT id, username, role, status, last_login_at, created_at
+        """SELECT id, username, role, status, must_change_password,
+                  last_login_at, created_at
            FROM users WHERE id = %s FOR UPDATE""",
         (user_id,),
     )
@@ -345,6 +387,65 @@ def update_user_role(
             target["role"] = new_role
         conn.commit()
         return _user_summary(target)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def reset_user_password(
+    actor: Mapping[str, Any],
+    user_id: int,
+    metadata: Optional[Mapping[str, Optional[str]]] = None,
+) -> dict[str, Any]:
+    """Generate a one-time password, force replacement, revoke sessions, and audit."""
+    actor_id = int(actor["id"])
+    if actor.get("role") != ROLE_SUPER_ADMIN:
+        raise AdminActionError("Only a super-admin can reset passwords", 403)
+    if actor_id == user_id:
+        raise AdminActionError("Use change-password to update your own password")
+
+    # token_urlsafe is URL/form safe and comfortably exceeds the password policy.
+    temporary_password = secrets.token_urlsafe(15)
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            target = _locked_user(cursor, user_id)
+            if not target:
+                raise AdminActionError("User not found", 404)
+            cursor.execute(
+                """UPDATE users
+                   SET password_hash = %s, must_change_password = TRUE
+                   WHERE id = %s""",
+                (hash_password(temporary_password), user_id),
+            )
+            cursor.execute(
+                """UPDATE auth_sessions
+                   SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP())
+                   WHERE user_id = %s AND revoked_at IS NULL""",
+                (user_id,),
+            )
+            revoked_sessions = cursor.rowcount
+            _audit(
+                cursor,
+                admin_user_id=actor_id,
+                action="user.password_reset",
+                target_type="user",
+                target_id=user_id,
+                details={
+                    "username": target["username"],
+                    "must_change_password": True,
+                    "revoked_sessions": revoked_sessions,
+                },
+                metadata=metadata,
+            )
+            target["must_change_password"] = True
+        conn.commit()
+        return {
+            "user": _user_summary(target),
+            "temporary_password": temporary_password,
+        }
     except Exception:
         conn.rollback()
         raise

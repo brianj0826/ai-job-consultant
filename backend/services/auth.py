@@ -13,13 +13,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from collections import defaultdict, deque
 import hashlib
 import hmac
+import ipaddress
 import os
 import secrets
-import threading
-import time
 from typing import Optional
 
 import pymysql
@@ -32,6 +30,12 @@ from backend.services.database import (
     get_connection,
     hash_password,
 )
+from backend.services.rate_limit import (
+    clear_failed_logins as clear_shared_failed_logins,
+    consume_login_attempt as consume_shared_login_attempt,
+    login_retry_after as shared_login_retry_after,
+    record_failed_login as record_shared_failed_login,
+)
 
 
 SESSION_COOKIE_NAME = "session_token"
@@ -41,19 +45,18 @@ USERNAME_MIN_LENGTH = 2
 USERNAME_MAX_LENGTH = 64
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
+LOGIN_PASSWORD_MIN_LENGTH = 1
 
-# A deliberately small in-process protection for password guessing.  It is
-# keyed by the direct client IP and normalized username, configurable for
-# deployments, and successful logins clear only that principal's failures.
-_failed_login_attempts: dict[tuple[str, str], deque[float]] = defaultdict(deque)
-_failed_login_attempts_lock = threading.Lock()
-
-
-def _bool_env(name: str, default: bool) -> bool:
+def _strict_bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
-    if value is None:
+    if value is None or not value.strip():
         return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise AuthConfigurationError(f"{name} must be a boolean value")
 
 
 def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -78,61 +81,54 @@ def login_failure_window_seconds() -> int:
     return _bounded_int_env("LOGIN_FAILURE_WINDOW_SECONDS", 900, 60, 86_400)
 
 
-def _login_attempt_key(ip_address: Optional[str], username: str) -> tuple[str, str]:
-    return ((ip_address or "unknown")[:45], username.casefold())
-
-
-def _prune_attempts(attempts: deque[float], now: float, window: int) -> None:
-    while attempts and now - attempts[0] >= window:
-        attempts.popleft()
+def _login_attempt_key(ip_address: Optional[str], username: str) -> str:
+    return f"{(ip_address or 'unknown')[:45]}\0{username.casefold()}"
 
 
 def login_retry_after(ip_address: Optional[str], username: str) -> int:
     """Return remaining seconds before another password attempt is accepted."""
-    now = time.monotonic()
-    window = login_failure_window_seconds()
-    key = _login_attempt_key(ip_address, username)
-    with _failed_login_attempts_lock:
-        attempts = _failed_login_attempts.get(key)
-        if not attempts:
-            return 0
-        _prune_attempts(attempts, now, window)
-        if not attempts:
-            _failed_login_attempts.pop(key, None)
-            return 0
-        if len(attempts) < login_failure_limit():
-            return 0
-        return max(1, int(window - (now - attempts[0])) + 1)
+    return shared_login_retry_after(
+        _login_attempt_key(ip_address, username),
+        login_failure_limit(),
+        login_failure_window_seconds(),
+    )
+
+
+def consume_login_attempt(ip_address: Optional[str], username: str) -> int:
+    """Atomically reserve an authentication attempt before password verification."""
+    return consume_shared_login_attempt(
+        _login_attempt_key(ip_address, username),
+        login_failure_limit(),
+        login_failure_window_seconds(),
+    )
 
 
 def record_failed_login(ip_address: Optional[str], username: str) -> None:
     """Record a failed password attempt after credentials have been checked."""
-    now = time.monotonic()
-    window = login_failure_window_seconds()
-    key = _login_attempt_key(ip_address, username)
-    with _failed_login_attempts_lock:
-        attempts = _failed_login_attempts[key]
-        _prune_attempts(attempts, now, window)
-        attempts.append(now)
+    record_shared_failed_login(
+        _login_attempt_key(ip_address, username),
+        login_failure_window_seconds(),
+    )
 
 
 def clear_failed_logins(ip_address: Optional[str], username: str) -> None:
     """Clear only this IP+username failure bucket after a successful login."""
-    with _failed_login_attempts_lock:
-        _failed_login_attempts.pop(_login_attempt_key(ip_address, username), None)
+    clear_shared_failed_logins(_login_attempt_key(ip_address, username))
 
 
 def session_cookie_secure() -> bool:
     """Default to secure cookies outside explicitly local environments."""
     app_env = os.getenv("APP_ENV", "development").strip().lower()
     default = app_env not in {"development", "dev", "local", "test"}
-    return _bool_env("SESSION_COOKIE_SECURE", default)
+    return _strict_bool_env("SESSION_COOKIE_SECURE", default)
 
 
 def session_cookie_samesite() -> str:
     value = os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
     if value not in {"lax", "strict", "none"}:
-        return "lax"
+        raise AuthConfigurationError(
+            "SESSION_COOKIE_SAMESITE must be one of: lax, strict, none"
+        )
     return value
 
 
@@ -172,6 +168,17 @@ def validate_password(password: str) -> str:
     return password
 
 
+def validate_login_password(password: str) -> str:
+    """Accept a legacy password at login without weakening new-password policy."""
+    if not isinstance(password, str):
+        raise ValueError("Password must be a string")
+    if not LOGIN_PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
+        raise ValueError(
+            f"Password must contain {LOGIN_PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters"
+        )
+    return password
+
+
 @dataclass(frozen=True)
 class AuthenticatedUser:
     """Current user and the authenticated server-side session."""
@@ -180,6 +187,7 @@ class AuthenticatedUser:
     username: str
     role: str
     status: str
+    must_change_password: bool
     session_id: int
     csrf_token_hash: str
     last_login_at: Optional[datetime] = None
@@ -199,6 +207,7 @@ class AuthenticatedUser:
             "username": self.username,
             "role": self.role,
             "status": self.status,
+            "must_change_password": bool(self.must_change_password),
             "last_login_at": self.last_login_at,
             "created_at": self.created_at,
         }
@@ -213,13 +222,88 @@ class SessionCredentials:
     expires_at: datetime
 
 
-class BootstrapConfigurationError(RuntimeError):
+class AuthConfigurationError(RuntimeError):
+    """Raised when authentication/deployment configuration is unsafe."""
+
+
+class BootstrapConfigurationError(AuthConfigurationError):
     """Raised for an unsafe or incomplete first-super-admin configuration."""
 
 
+def _trusted_proxy_networks() -> tuple[ipaddress._BaseNetwork, ...]:
+    raw = os.getenv("TRUSTED_PROXY_CIDRS", "").strip()
+    if not raw:
+        return ()
+    networks = []
+    for item in raw.split(","):
+        value = item.strip()
+        if not value:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except ValueError as exc:
+            raise AuthConfigurationError(
+                f"Invalid TRUSTED_PROXY_CIDRS entry: {value}"
+            ) from exc
+    return tuple(networks)
+
+
+def validate_auth_configuration() -> None:
+    """Fail startup for cookie and trusted-proxy combinations browsers reject."""
+    secure = session_cookie_secure()
+    samesite = session_cookie_samesite()
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    if app_env not in {"development", "dev", "local", "test"} and not secure:
+        raise AuthConfigurationError(
+            "SESSION_COOKIE_SECURE must be true outside local/test environments"
+        )
+    if samesite == "none" and not secure:
+        raise AuthConfigurationError(
+            "SESSION_COOKIE_SAMESITE=none requires SESSION_COOKIE_SECURE=true"
+        )
+    trust_proxy = _strict_bool_env("TRUST_PROXY_HEADERS", False)
+    networks = _trusted_proxy_networks()
+    if trust_proxy and not networks:
+        raise AuthConfigurationError(
+            "TRUSTED_PROXY_CIDRS is required when TRUST_PROXY_HEADERS=true"
+        )
+    domain = session_cookie_domain()
+    if domain and (
+        "://" in domain
+        or "/" in domain
+        or ":" in domain
+        or any(character.isspace() for character in domain)
+    ):
+        raise AuthConfigurationError("SESSION_COOKIE_DOMAIN must be a bare hostname")
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    direct_host = request.client.host if request.client else None
+    if not direct_host or not _strict_bool_env("TRUST_PROXY_HEADERS", False):
+        return direct_host
+    try:
+        direct_ip = ipaddress.ip_address(direct_host)
+    except ValueError:
+        return direct_host
+    if not any(direct_ip in network for network in _trusted_proxy_networks()):
+        return direct_host
+
+    # The bundled Nginx overwrites X-Real-IP. Prefer that trusted value over a
+    # potentially client-supplied X-Forwarded-For header.
+    candidate = request.headers.get("x-real-ip", "").strip()
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    candidate = candidate or (forwarded_for.split(",", 1)[0].strip() if forwarded_for else "")
+    if not candidate:
+        return direct_host
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return direct_host
+
+
 def request_metadata(request: Request) -> dict[str, Optional[str]]:
-    """Collect only direct request metadata suitable for audit records."""
-    client_host = request.client.host if request.client else None
+    """Collect bounded metadata, trusting forwarding headers only from allowlisted proxies."""
+    client_host = _client_ip(request)
     user_agent = request.headers.get("user-agent")
     return {
         "ip_address": client_host[:45] if client_host else None,
@@ -280,7 +364,8 @@ def _load_authenticated_user(raw_session_token: str) -> Optional[AuthenticatedUs
         with conn.cursor() as cursor:
             cursor.execute(
                 """SELECT s.id AS session_id, s.user_id, s.csrf_token_hash,
-                          u.username, u.role, u.status, u.last_login_at, u.created_at
+                          u.username, u.role, u.status, u.must_change_password,
+                          u.last_login_at, u.created_at
                    FROM auth_sessions AS s
                    INNER JOIN users AS u ON u.id = s.user_id
                    WHERE s.token_hash = %s
@@ -303,6 +388,7 @@ def _load_authenticated_user(raw_session_token: str) -> Optional[AuthenticatedUs
             username=row["username"],
             role=row["role"],
             status=row["status"],
+            must_change_password=bool(row["must_change_password"]),
             session_id=row["session_id"],
             csrf_token_hash=row["csrf_token_hash"],
             last_login_at=row["last_login_at"],
@@ -330,14 +416,25 @@ def _request_auth_context(request: Request) -> AuthenticatedUser:
     return current_user
 
 
-def require_current_user(request: Request) -> dict:
-    """Return the active user as a mapping for direct route use or ``Depends``.
+def require_authenticated_user(request: Request) -> dict:
+    """Return an active user, including accounts that still must change password.
 
     It deliberately omits the session ID and CSRF digest.  Existing routes can
     safely use ``current_user[\"id\"]`` without gaining access to credential
     material, while :func:`require_csrf` uses the request-private context.
     """
     return _request_auth_context(request).public_dict()
+
+
+def require_current_user(request: Request) -> dict:
+    """Require authentication and completion of any mandatory password change."""
+    current_user = require_authenticated_user(request)
+    if current_user["must_change_password"]:
+        raise HTTPException(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            detail="Password change required",
+        )
+    return current_user
 
 
 def require_admin(request: Request) -> dict:
@@ -373,9 +470,22 @@ def require_csrf(request: Request) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
 
 
+def require_business_csrf(request: Request) -> None:
+    """Apply the forced-password-change guard before CSRF on business writes."""
+    require_current_user(request)
+    require_csrf(request)
+
+
 def require_admin_csrf(request: Request) -> dict:
     """Convenience dependency for state-changing administrator endpoints."""
     current_user = require_admin(request)
+    require_csrf(request)
+    return current_user
+
+
+def require_super_admin_csrf(request: Request) -> dict:
+    """Require a password-complete super-admin session and a valid CSRF token."""
+    current_user = require_super_admin(request)
     require_csrf(request)
     return current_user
 
@@ -454,9 +564,11 @@ def bootstrap_first_admin_from_environment() -> Optional[dict]:
     """
     supplied_username = os.getenv("ADMIN_BOOTSTRAP_USERNAME")
     supplied_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD")
-    if supplied_username is None and supplied_password is None:
+    username_present = bool(supplied_username and supplied_username.strip())
+    password_present = bool(supplied_password)
+    if not username_present and not password_present:
         return None
-    if not supplied_username or not supplied_password:
+    if not username_present or not password_present:
         raise BootstrapConfigurationError(
             "ADMIN_BOOTSTRAP_USERNAME and ADMIN_BOOTSTRAP_PASSWORD must be set together"
         )

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from backend.services.access import current_user_id
-from backend.services.auth import require_csrf, require_current_user
+from backend.services.auth import require_business_csrf, require_current_user
 from backend.services.rag import get_collection
 from backend.services.tools import TOOLS, execute_tool
 
@@ -110,7 +110,7 @@ def _handle_method(method: str, params: dict, user_id: int) -> dict:
     return {"error": f"未知方法: {method}"}
 
 
-@router.post("/", dependencies=[Depends(require_csrf)])
+@router.post("/", dependencies=[Depends(require_business_csrf)])
 async def mcp_endpoint(
     request: Request,
     current_user: dict = Depends(require_current_user),
