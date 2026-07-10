@@ -16,9 +16,13 @@
         </el-icon>
       </button>
 
-      <div class="app-topbar__titles">
-        <h1 class="app-topbar__title">{{ title }}</h1>
-        <p v-if="context" class="app-topbar__context">{{ context }}</p>
+      <div class="app-topbar__titles" aria-live="polite">
+        <Transition name="topbar-title" mode="out-in">
+          <div :key="viewKey" class="app-topbar__title-copy">
+            <h1 class="app-topbar__title">{{ title }}</h1>
+            <p v-if="context" class="app-topbar__context">{{ context }}</p>
+          </div>
+        </Transition>
       </div>
     </div>
 
@@ -39,7 +43,8 @@ defineProps({
   title: { type: String, required: true },
   context: { type: String, default: '' },
   username: { type: String, default: '' },
-  navigationOpen: { type: Boolean, default: false }
+  navigationOpen: { type: Boolean, default: false },
+  viewKey: { type: String, default: '' }
 })
 
 defineEmits(['toggle-navigation'])
@@ -112,7 +117,35 @@ defineExpose({
 }
 
 .app-topbar__titles {
+  display: grid;
   min-width: 0;
+}
+
+.app-topbar__title-copy {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.topbar-title-enter-active {
+  transition:
+    opacity var(--duration-content, 220ms) var(--ease-enter, var(--ease-standard)),
+    transform var(--duration-content, 220ms) var(--ease-enter, var(--ease-standard));
+}
+
+.topbar-title-leave-active {
+  transition:
+    opacity var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard)),
+    transform var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard));
+}
+
+.topbar-title-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.topbar-title-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 
 .app-topbar__title {
@@ -176,6 +209,18 @@ defineExpose({
 
   .app-topbar__account-name {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-title-enter-active,
+  .topbar-title-leave-active {
+    transition-duration: 0.01ms;
+  }
+
+  .topbar-title-enter-from,
+  .topbar-title-leave-to {
+    transform: none;
   }
 }
 </style>

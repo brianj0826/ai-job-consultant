@@ -8,6 +8,16 @@
         <span class="sidebar-brand__name">职达</span>
         <span class="sidebar-brand__meta">Career Intelligence</span>
       </div>
+      <button
+        v-if="showCloseButton"
+        class="sidebar-close"
+        type="button"
+        aria-label="关闭导航"
+        title="关闭导航"
+        @click="$emit('close-navigation')"
+      >
+        <el-icon :size="20" aria-hidden="true"><Close /></el-icon>
+      </button>
     </header>
 
     <nav class="sidebar-navigation" aria-label="工作台功能">
@@ -29,6 +39,7 @@
             <el-select
               v-model="currentSessionId"
               class="session-picker__select"
+              :disabled="sessionActionPending"
               placeholder="选择会话"
               size="small"
               @change="switchSession"
@@ -38,7 +49,8 @@
             <el-button
               class="icon-button"
               size="small"
-              :disabled="!currentSessionId"
+              :disabled="!currentSessionId || sessionActionPending"
+              :loading="renamingSession"
               aria-label="重命名当前会话"
               title="重命名当前会话"
               @click="handleRenameSession"
@@ -48,16 +60,34 @@
           </div>
 
           <div class="button-stack">
-            <el-button type="primary" size="small" @click="newSession">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="creatingSession"
+              :disabled="sessionActionPending && !creatingSession"
+              @click="newSession"
+            >
               <el-icon :size="15" aria-hidden="true"><Plus /></el-icon>
               <span>新建对话</span>
             </el-button>
-            <el-button type="danger" plain size="small" @click="clearSession">
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :loading="clearingSession"
+              :disabled="!currentSessionId || (sessionActionPending && !clearingSession)"
+              @click="clearSession"
+            >
               <el-icon :size="15" aria-hidden="true"><Delete /></el-icon>
               <span>清空会话</span>
             </el-button>
             <div class="button-grid">
-              <el-button size="small" @click="exportSession">
+              <el-button
+                size="small"
+                :loading="exportingSession"
+                :disabled="sessionActionPending && !exportingSession"
+                @click="exportSession"
+              >
                 <el-icon :size="15" aria-hidden="true"><Download /></el-icon>
                 <span>导出</span>
               </el-button>
@@ -77,14 +107,51 @@
             </span>
           </template>
 
-          <el-tag v-if="docCount > 0" type="success" effect="plain" size="small" class="knowledge-status">
+          <el-tag
+            v-if="knowledgeStatus === 'loading' && !hasKnowledgeSnapshot"
+            type="info"
+            effect="plain"
+            size="small"
+            class="knowledge-status"
+          >
+            <el-icon class="knowledge-status__spinner" :size="13" aria-hidden="true"><Loading /></el-icon>
+            <span>正在加载知识库</span>
+          </el-tag>
+          <el-tag
+            v-else-if="knowledgeStatus === 'error' && !hasKnowledgeSnapshot"
+            type="danger"
+            effect="plain"
+            size="small"
+            class="knowledge-status"
+          >
+            <el-icon :size="13" aria-hidden="true"><WarningFilled /></el-icon>
+            <span>知识库加载失败</span>
+          </el-tag>
+          <el-tag v-else-if="docCount > 0" type="success" effect="plain" size="small" class="knowledge-status">
             <el-icon :size="13" aria-hidden="true"><CircleCheck /></el-icon>
             <span>{{ docCount }} 个文档块</span>
           </el-tag>
-          <el-tag v-else type="warning" effect="plain" size="small" class="knowledge-status">
+          <el-tag v-else-if="hasKnowledgeSnapshot" type="warning" effect="plain" size="small" class="knowledge-status">
             <el-icon :size="13" aria-hidden="true"><WarningFilled /></el-icon>
             <span>知识库为空</span>
           </el-tag>
+
+          <p
+            v-if="knowledgeStatus === 'loading' && hasKnowledgeSnapshot"
+            class="knowledge-refreshing"
+            role="status"
+          >
+            正在刷新知识库…
+          </p>
+
+          <p
+            v-if="knowledgeStatus === 'error' && hasKnowledgeSnapshot"
+            class="knowledge-warning"
+            role="status"
+          >
+            <el-icon :size="14" aria-hidden="true"><WarningFilled /></el-icon>
+            <span>{{ knowledgeError }}，当前仍显示上次加载的数据。</span>
+          </p>
 
           <div v-if="docSources.length" class="source-list">
             <div v-for="(source, index) in docSources" :key="index" class="source-item">
@@ -103,6 +170,7 @@
                   size="small"
                   circle
                   :loading="deletingSource === source.source"
+                  :disabled="uploadingDocument || (Boolean(deletingSource) && deletingSource !== source.source)"
                   :aria-label="`删除来源 ${source.source}`"
                   @click="handleDeleteSource(source.source)"
                 >
@@ -116,9 +184,10 @@
             class="upload-control"
             :http-request="uploadFile"
             :show-file-list="false"
+            :disabled="knowledgeMutationPending"
             accept=".pdf,.txt,.md,.docx"
           >
-            <el-button type="primary" plain size="small">
+            <el-button type="primary" plain size="small" :loading="uploadingDocument" :disabled="knowledgeMutationPending">
               <el-icon :size="15" aria-hidden="true"><DocumentAdd /></el-icon>
               <span>上传文档</span>
             </el-button>
@@ -219,6 +288,7 @@ import {
   ChatDotRound,
   ChatLineRound,
   CircleCheck,
+  Close,
   Connection,
   DataAnalysis,
   Delete,
@@ -230,6 +300,7 @@ import {
   FolderOpened,
   House,
   Link,
+  Loading,
   Moon,
   Plus,
   SwitchButton,
@@ -251,22 +322,42 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({
   currentUsername: { type: String, default: '' },
-  userId: { type: Number, default: null }
+  userId: { type: Number, default: null },
+  previewMode: { type: Boolean, default: false },
+  showCloseButton: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'user-logged-in', 'show-analytics', 'logout', 'quick-chat', 'go-home'])
+const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'user-logged-in', 'show-analytics', 'logout', 'quick-chat', 'go-home', 'close-navigation'])
 
 const resumeSource = computed(() => docSources.value.find(source => source.type === 'file') || null)
 
 const activePanels = ref(['chat'])
 const sessions = ref([])
 const currentSessionId = ref(null)
-const recentMessages = ref([])
 const docCount = ref(0)
 const docSources = ref([])
+const knowledgeStatus = ref('idle')
+const knowledgeError = ref('')
+const hasKnowledgeSnapshot = ref(false)
 const deletingSource = ref(null)
+const uploadingDocument = ref(false)
+const creatingSession = ref(false)
+const clearingSession = ref(false)
+const renamingSession = ref(false)
+const exportingSession = ref(false)
+const initializingUserData = ref(false)
 const jdText = ref('')
 const fetchingJD = ref(false)
+const sessionActionPending = computed(() => (
+  creatingSession.value ||
+  clearingSession.value ||
+  renamingSession.value ||
+  exportingSession.value ||
+  initializingUserData.value
+))
+const knowledgeMutationPending = computed(() => (
+  uploadingDocument.value || Boolean(deletingSource.value) || initializingUserData.value
+))
 
 const handleMatchJob = () => {
   if (!jdText.value) return
@@ -275,6 +366,8 @@ const handleMatchJob = () => {
 }
 
 const handleFetchJD = async () => {
+  if (fetchingJD.value) return
+  fetchingJD.value = true
   try {
     const { value: url } = await ElMessageBox.prompt('请输入招聘页面的 URL', '链接导入 JD', {
       confirmButtonText: '抓取',
@@ -282,7 +375,6 @@ const handleFetchJD = async () => {
       inputPlaceholder: 'https://www.zhipin.com/...'
     })
     if (!url || !url.trim()) return
-    fetchingJD.value = true
     const res = await fetchUrlContent(url.trim())
     const title = res.data.title || ''
     const text = res.data.text || ''
@@ -302,65 +394,72 @@ const handleGenQuestions = () => {
 }
 
 const initUserData = async () => {
-  if (!props.userId) return
-  currentSessionId.value = null
-  recentMessages.value = []
-  docSources.value = []
+  if (!props.userId || initializingUserData.value) return
+  initializingUserData.value = true
+  try {
+    currentSessionId.value = null
+    sessions.value = []
+    docSources.value = []
+    docCount.value = 0
+    hasKnowledgeSnapshot.value = false
 
-  await loadSessions()
-  await loadDocStatus()
+    await Promise.all([loadSessions(), loadDocStatus()])
 
-  if (sessions.value.length === 0) {
-    const now = new Date()
-    const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    const newRes = await createSession(props.userId, name)
-    currentSessionId.value = newRes.data.session_id
-    emit('new-session', currentSessionId.value)
-    await loadSessions()
-    switchSession(currentSessionId.value)
-  } else {
-    currentSessionId.value = sessions.value[0].id
-    switchSession(currentSessionId.value)
+    if (sessions.value.length === 0) {
+      const now = new Date()
+      const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      const newRes = await createSession(props.userId, name)
+      currentSessionId.value = newRes.data.session_id
+      emit('new-session', currentSessionId.value)
+      await loadSessions()
+    } else {
+      currentSessionId.value = sessions.value[0].id
+      await switchSession(currentSessionId.value)
+    }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '用户数据加载失败，请稍后重试')
+  } finally {
+    initializingUserData.value = false
   }
 }
 
 watch(() => props.userId, (newVal) => {
-  if (newVal) initUserData()
+  if (newVal && !props.previewMode) initUserData()
 })
 
 const loadSessions = async () => {
   if (!props.userId) return
   const res = await getSessions(props.userId)
   sessions.value = res.data
-  if (sessions.value.length && !currentSessionId.value) {
-    currentSessionId.value = sessions.value[0].id
-    switchSession(currentSessionId.value)
+  if (currentSessionId.value && !sessions.value.some(session => session.id === currentSessionId.value)) {
+    currentSessionId.value = null
   }
 }
 
-const switchSession = async (sessionId) => {
+const switchSession = (sessionId) => {
   emit('session-changed', sessionId)
-  try {
-    const res = await getMessages(sessionId)
-    recentMessages.value = res.data.slice(-5)
-  } catch (e) {
-    recentMessages.value = []
-  }
 }
 
 const newSession = async () => {
-  if (!props.userId) return
-  const now = new Date()
-  const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-  const res = await createSession(props.userId, name)
-  currentSessionId.value = res.data.session_id
-  emit('new-session', currentSessionId.value)
-  await loadSessions()
-  switchSession(currentSessionId.value)
+  if (!props.userId || sessionActionPending.value) return
+  creatingSession.value = true
+  try {
+    const now = new Date()
+    const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    const res = await createSession(props.userId, name)
+    currentSessionId.value = res.data.session_id
+    emit('new-session', currentSessionId.value)
+    await loadSessions()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '新建会话失败')
+  } finally {
+    creatingSession.value = false
+  }
 }
 
 const clearSession = async () => {
-  if (!currentSessionId.value) return
+  if (!currentSessionId.value || sessionActionPending.value) return
+  clearingSession.value = true
   try {
     await ElMessageBox.confirm(
       '确定要清空当前会话吗？所有对话记录将被永久删除。',
@@ -368,6 +467,7 @@ const clearSession = async () => {
       { confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'warning' }
     )
     await deleteSession(currentSessionId.value)
+    currentSessionId.value = null
     emit('clear-session')
     await loadSessions()
     if (sessions.value.length) {
@@ -375,18 +475,21 @@ const clearSession = async () => {
       switchSession(currentSessionId.value)
     } else {
       currentSessionId.value = null
-      recentMessages.value = []
     }
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('清空会话失败')
+  } finally {
+    clearingSession.value = false
   }
 }
 
 const exportSession = async () => {
+  if (exportingSession.value || sessionActionPending.value) return
   if (!currentSessionId.value) {
     ElMessage.warning('请先选择会话')
     return
   }
+  exportingSession.value = true
   try {
     const res = await getMessages(currentSessionId.value)
     const messages = res.data
@@ -405,10 +508,13 @@ const exportSession = async () => {
     ElMessage.success('导出成功')
   } catch (e) {
     ElMessage.error('导出失败')
+  } finally {
+    exportingSession.value = false
   }
 }
 
 const uploadFile = async (option) => {
+  if (knowledgeMutationPending.value) return
   const file = option.file
   const alreadyExists = docSources.value.some(source => source.source === file.name)
   if (alreadyExists) {
@@ -416,6 +522,7 @@ const uploadFile = async (option) => {
     return
   }
 
+  uploadingDocument.value = true
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -425,24 +532,35 @@ const uploadFile = async (option) => {
     if (res.status === 200) {
       ElMessage.success(res.data.message || '文档上传成功，知识库已更新')
       emit('pdf-uploaded')
-      loadDocStatus()
-      if (currentSessionId.value) switchSession(currentSessionId.value)
+      await loadDocStatus()
+      if (currentSessionId.value) await switchSession(currentSessionId.value)
     } else {
       ElMessage.error('上传返回异常状态')
     }
   } catch {
     ElMessage.error('上传失败，请稍后重试')
+  } finally {
+    uploadingDocument.value = false
   }
 }
 
+let knowledgeRequestId = 0
 const loadDocStatus = async () => {
+  if (props.userId === null || props.userId === undefined) return
+  const requestId = ++knowledgeRequestId
+  knowledgeStatus.value = 'loading'
+  knowledgeError.value = ''
   try {
     const res = await getDocStatus(props.userId)
+    if (requestId !== knowledgeRequestId) return
     docCount.value = res.data.doc_count
     docSources.value = res.data.sources || []
+    hasKnowledgeSnapshot.value = true
+    knowledgeStatus.value = 'ready'
   } catch (e) {
-    docCount.value = 0
-    docSources.value = []
+    if (requestId !== knowledgeRequestId) return
+    knowledgeError.value = e.response?.data?.detail || '知识库刷新失败'
+    knowledgeStatus.value = 'error'
   }
 }
 
@@ -456,7 +574,8 @@ const toggleDark = () => {
 }
 
 const handleRenameSession = async () => {
-  if (!currentSessionId.value) return
+  if (!currentSessionId.value || sessionActionPending.value) return
+  renamingSession.value = true
   try {
     const { value } = await ElMessageBox.prompt('请输入新名称', '重命名会话', {
       confirmButtonText: '确定',
@@ -470,6 +589,8 @@ const handleRenameSession = async () => {
     }
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('重命名失败')
+  } finally {
+    renamingSession.value = false
   }
 }
 
@@ -485,14 +606,14 @@ const checkBackendStatus = async () => {
 }
 
 const handleDeleteSource = async (source) => {
-  if (!props.userId) return
+  if (!props.userId || knowledgeMutationPending.value) return
+  deletingSource.value = source
   try {
     await ElMessageBox.confirm(
       `确定要删除来源「${source}」的所有内容吗？此操作不可恢复。`,
       '确认删除',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    deletingSource.value = source
     await deleteSource(props.userId, source)
     ElMessage.success('已删除')
     await loadDocStatus()
@@ -504,10 +625,16 @@ const handleDeleteSource = async (source) => {
 }
 
 onMounted(() => {
-  if (props.userId) initUserData()
+  if (props.userId && !props.previewMode) initUserData()
   isDark.value = document.documentElement.classList.contains('dark')
-  checkBackendStatus()
-  statusTimer = setInterval(checkBackendStatus, 30000)
+  if (props.previewMode) {
+    backendOnline.value = false
+    hasKnowledgeSnapshot.value = true
+    knowledgeStatus.value = 'ready'
+  } else {
+    checkBackendStatus()
+    statusTimer = setInterval(checkBackendStatus, 30000)
+  }
 })
 
 onUnmounted(() => {
@@ -524,10 +651,14 @@ onUnmounted(() => {
 }
 
 .sidebar-brand {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-5);
+  background: var(--color-surface);
 }
 
 .sidebar-brand__mark {
@@ -546,6 +677,40 @@ onUnmounted(() => {
 .sidebar-account__identity {
   display: grid;
   min-width: 0;
+}
+
+.sidebar-brand__copy {
+  flex: 1;
+}
+
+.sidebar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    color var(--duration-control) var(--ease-standard),
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard);
+}
+
+.sidebar-close:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.sidebar-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .sidebar-brand__name {
@@ -691,6 +856,35 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--space-1);
   max-width: 100%;
+}
+
+.knowledge-refreshing,
+.knowledge-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.knowledge-refreshing {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.knowledge-warning {
+  border: 1px solid color-mix(in srgb, var(--color-warning) 32%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.knowledge-warning .el-icon {
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+  color: var(--color-warning);
 }
 
 .source-list {

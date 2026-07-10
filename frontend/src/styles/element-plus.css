@@ -39,6 +39,10 @@
   --el-box-shadow-light: var(--shadow-popover);
   --el-box-shadow-lighter: var(--shadow-popover);
   --el-mask-color: var(--color-backdrop);
+  --el-transition-duration: var(--duration-content);
+  --el-transition-duration-fast: var(--duration-control);
+  --el-transition-function-ease-in-out-bezier: var(--ease-standard);
+  --el-transition-function-fast-bezier: var(--ease-enter);
 }
 
 .el-button {
@@ -53,6 +57,7 @@
     background-color var(--duration-control) var(--ease-standard),
     border-color var(--duration-control) var(--ease-standard),
     box-shadow var(--duration-control) var(--ease-standard),
+    filter var(--duration-control) var(--ease-standard),
     opacity var(--duration-control) var(--ease-standard),
     transform var(--duration-control) var(--ease-standard);
 }
@@ -178,6 +183,23 @@
 
 .el-drawer {
   --el-drawer-padding-primary: var(--space-6);
+
+  transition-property: transform;
+  transition-duration: var(--duration-panel);
+  transition-timing-function: var(--ease-enter);
+}
+
+.el-drawer-fade-enter-active {
+  transition: background-color var(--duration-panel) var(--ease-enter);
+}
+
+.el-drawer-fade-leave-active {
+  transition: background-color var(--duration-panel-exit) var(--ease-exit);
+}
+
+.el-drawer-fade-leave-active .el-drawer {
+  transition-duration: var(--duration-panel-exit);
+  transition-timing-function: var(--ease-exit);
 }
 
 .el-drawer__header {
@@ -224,6 +246,29 @@
 
 .el-progress-bar__outer {
   background: var(--color-surface-hover);
+}
+
+.el-progress-bar__inner {
+  transition: width var(--duration-content) var(--ease-enter);
+}
+
+.el-progress-circle__path {
+  transition:
+    stroke-dasharray var(--duration-content) var(--ease-enter),
+    stroke var(--duration-content) var(--ease-standard),
+    opacity var(--duration-content) var(--ease-standard) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --el-transition-duration: 0.01ms;
+    --el-transition-duration-fast: 0.01ms;
+  }
+
+  .el-progress-bar__inner,
+  .el-progress-circle__path {
+    transition: none !important;
+  }
 }
 
 @media (max-width: 767px) {

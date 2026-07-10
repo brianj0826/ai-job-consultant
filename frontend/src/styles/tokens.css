@@ -87,8 +87,15 @@
   --glass-blur: 16px;
   --duration-control: 140ms;
   --duration-content: 220ms;
+  --duration-content-exit: 160ms;
+  --duration-backdrop: 180ms;
   --duration-panel: 300ms;
+  --duration-panel-exit: 220ms;
+  --duration-hero: 420ms;
   --ease-standard: cubic-bezier(.22, 1, .36, 1);
+  --ease-enter: var(--ease-standard);
+  --ease-exit: cubic-bezier(.4, 0, 1, 1);
+  --ease-loop: ease-in-out;
 
   /* Layout */
   --control-height-small: 1.875rem;
