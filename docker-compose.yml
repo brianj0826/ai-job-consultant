@@ -3,40 +3,66 @@ services:
     image: mysql:8.0
     container_name: aiagent-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: ai_assistant
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_NAME:-ai_assistant}
+      MYSQL_USER: ${DB_USER:?Set DB_USER in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - mysql_data:/var/lib/mysql
     restart: always
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$${MYSQL_ROOT_PASSWORD}\""]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aiagent-redis
+    restart: always
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   backend:
     build: ./backend
     container_name: aiagent-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./chroma_db:/app/chroma_db
     environment:
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_USER=root
-      - DB_PASSWORD=root123
-      - DB_NAME=ai_assistant
+      - DB_USER=${DB_USER:?Set DB_USER in .env}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      - DB_NAME=${DB_NAME:-ai_assistant}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RATE_LIMIT_ALLOW_MEMORY_FALLBACK=${RATE_LIMIT_ALLOW_MEMORY_FALLBACK:-false}
+      - RATE_LIMIT_KEY_PREFIX=${RATE_LIMIT_KEY_PREFIX:-ai-job-consultant}
+      - CHAT_REQUEST_LEASE_SECONDS=${CHAT_REQUEST_LEASE_SECONDS:-300}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_API_URL=${DEEPSEEK_API_URL:-https://api.deepseek.com/chat/completions}
+      - RAG_DISABLED=${RAG_DISABLED:-false}
       # Cookie-session and first-admin configuration. Keep local development
       # on HTTP only; production must set APP_ENV=production and terminate TLS
       # before exposing the application.
       - APP_ENV=${APP_ENV:-development}
       - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-168}
-      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
+      # Empty means: derive a safe default from APP_ENV.
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-}
       - SESSION_COOKIE_SAMESITE=${SESSION_COOKIE_SAMESITE:-lax}
       - SESSION_COOKIE_DOMAIN=${SESSION_COOKIE_DOMAIN:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:80,http://127.0.0.1:80,http://localhost:5173,http://127.0.0.1:5173}
+      - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-true}
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-172.30.10.10/32}
+      - AUTH_SESSION_RETENTION_DAYS=${AUTH_SESSION_RETENTION_DAYS:-30}
+      - AUTH_SESSION_CLEANUP_INTERVAL_SECONDS=${AUTH_SESSION_CLEANUP_INTERVAL_SECONDS:-3600}
+      - BUSINESS_TIMEZONE=${BUSINESS_TIMEZONE:-Asia/Shanghai}
       # Set both bootstrap values for the first start only. The backend stores
       # only a password hash and ignores the values once a super-admin exists.
       - ADMIN_BOOTSTRAP_USERNAME=${ADMIN_BOOTSTRAP_USERNAME:-}
@@ -44,9 +70,11 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: always
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/ready')"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -66,15 +94,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      default:
+        ipv4_address: 172.30.10.10
 
   adminer:
     image: adminer:latest
     container_name: aiagent-adminer
     ports:
-      - "8088:8080"
+      - "127.0.0.1:${ADMINER_PORT:-8088}:8080"
     depends_on:
       - mysql
     restart: always
+    profiles: ["tools"]
 
 volumes:
   mysql_data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
