@@ -1,6 +1,14 @@
-from fastapi import APIRouter, HTTPException
+"""Deprecated compatibility aliases for the secure authentication API.
+
+New clients use ``/api/auth``.  Keeping these two aliases prevents an older
+frontend from silently falling back to username-only identity while ensuring it
+receives the exact same cookie-backed session and password policy.
+"""
+from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel
-from backend.services.database import register_user, login_user, get_or_create_user
+
+from backend.routers.auth import CredentialsRequest, login as secure_login, register as secure_register
+
 
 router = APIRouter()
 
@@ -12,36 +20,26 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str
-    password: str = ""  # 可选，兼容旧版无密码
+    password: str
 
 
-@router.post("/register")
-def register(req: RegisterRequest):
-    """注册新用户"""
-    if len(req.username) < 2:
-        raise HTTPException(status_code=400, detail="用户名至少2个字符")
-    if len(req.password) < 3:
-        raise HTTPException(status_code=400, detail="密码至少3个字符")
-
-    user_id = register_user(req.username, req.password)
-    if user_id is None:
-        raise HTTPException(status_code=409, detail="用户名已存在，请换一个")
-    return {"user_id": user_id, "username": req.username, "message": "注册成功"}
+@router.post("/register", status_code=status.HTTP_201_CREATED, deprecated=True)
+def register(request_data: RegisterRequest, request: Request, response: Response):
+    """Compatibility alias for ``POST /api/auth/register``."""
+    response.headers["Deprecation"] = "true"
+    return secure_register(
+        CredentialsRequest(username=request_data.username, password=request_data.password),
+        request,
+        response,
+    )
 
 
-@router.post("/login")
-def login(req: LoginRequest):
-    """用户登录"""
-    if not req.username:
-        raise HTTPException(status_code=400, detail="请输入用户名")
-
-    if req.password:
-        # 密码登录
-        user_id = login_user(req.username, req.password)
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        return {"user_id": user_id, "username": req.username}
-    else:
-        # 兼容旧版无密码登录
-        user_id = get_or_create_user(req.username)
-        return {"user_id": user_id}
+@router.post("/login", deprecated=True)
+def login(request_data: LoginRequest, request: Request, response: Response):
+    """Compatibility alias for ``POST /api/auth/login``."""
+    response.headers["Deprecation"] = "true"
+    return secure_login(
+        CredentialsRequest(username=request_data.username, password=request_data.password),
+        request,
+        response,
+    )

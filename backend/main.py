@@ -48,7 +48,9 @@ app.add_middleware(
         "http://localhost",
         "http://127.0.0.1",
         "http://localhost:80",
-        "http://127.0.0.1:80"
+        "http://127.0.0.1:80",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -65,8 +67,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # 导入路由
-from backend.routers import chat, documents, users, sessions, feedback, analytics, mcp
+from backend.routers import admin, auth, chat, documents, users, sessions, feedback, analytics, mcp
 
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
@@ -91,6 +95,25 @@ def startup_check():
         logger.info("数据库表结构已就绪")
     except Exception as e:
         logger.warning(f"数据库初始化失败: {e}")
+
+    # Bootstrap credentials are optional, but when either value is supplied a
+    # malformed configuration must stop startup rather than leave an unknown
+    # administrator state. The service never logs or persists the raw secret.
+    try:
+        from backend.services.auth import (
+            BootstrapConfigurationError,
+            bootstrap_first_admin_from_environment,
+        )
+        bootstrap = bootstrap_first_admin_from_environment()
+        if bootstrap and bootstrap["created"]:
+            logger.warning("Initial super-admin created for username: %s", bootstrap["username"])
+        elif bootstrap:
+            logger.info("A super-admin already exists; bootstrap credentials were not applied")
+    except BootstrapConfigurationError as e:
+        logger.critical("Invalid administrator bootstrap configuration: %s", e)
+        raise
+    except Exception as e:
+        logger.warning(f"Administrator bootstrap failed: {e}")
 
     try:
         from backend.services.database import get_connection

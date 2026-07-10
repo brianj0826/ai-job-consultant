@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -11,18 +11,23 @@ from backend.services.deepseek_api import get_ai_response, get_ai_response_with_
 from backend.services.memory import trim_history, generate_summary
 from backend.services.tools import TOOLS, execute_tool
 from backend.services.security import moderate_text, check_rate_limit, sanitize_input
+from backend.services.access import current_user_id, require_owned_session
+from backend.services.auth import require_csrf, require_current_user
 
 router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
-    user_id: int
     session_id: int
 
-@router.post("/")
-def chat(request: ChatRequest):
-    user_id = request.user_id
+@router.post("/", dependencies=[Depends(require_csrf)])
+def chat(
+    request: ChatRequest,
+    current_user: dict = Depends(require_current_user),
+):
+    user_id = current_user_id(current_user)
     session_id = request.session_id
+    require_owned_session(session_id, current_user)
     prompt = request.message
 
     # 0a. 频率限制检查
@@ -132,11 +137,15 @@ def chat(request: ChatRequest):
     }
 
 
-@router.post("/stream")
-def chat_stream(request: ChatRequest):
+@router.post("/stream", dependencies=[Depends(require_csrf)])
+def chat_stream(
+    request: ChatRequest,
+    current_user: dict = Depends(require_current_user),
+):
     """流式聊天端点（SSE），含工具调用预检"""
-    user_id = request.user_id
+    user_id = current_user_id(current_user)
     session_id = request.session_id
+    require_owned_session(session_id, current_user)
     prompt = request.message
 
     # 安全检查
