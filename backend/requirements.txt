@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+requests
+chromadb>=0.5.0
+sentence-transformers
+pypdf
+python-dotenv
+pymysql
+cryptography
+python-docx
