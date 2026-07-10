@@ -1,8 +1,9 @@
 # backend/services/security.py
 """安全模块：内容审核 + 频率限制"""
 import re
-import time
-from collections import defaultdict
+import os
+
+from backend.services.rate_limit import check_request_limit
 
 # ==================== 敏感词列表 ====================
 # 按类别组织，方便理解和扩展
@@ -51,8 +52,7 @@ def moderate_text(text: str, user_id: int = None) -> tuple:
 
 # ==================== 频率限制 ====================
 # 默认限制：每个用户每分钟最多 30 次请求
-DEFAULT_RATE_LIMIT = int(__import__('os').getenv('RATE_LIMIT_PER_MINUTE', '30'))
-_request_log = defaultdict(list)  # {user_id: [timestamp, timestamp, ...]}
+DEFAULT_RATE_LIMIT = max(1, int(os.getenv('RATE_LIMIT_PER_MINUTE', '30')))
 
 
 def check_rate_limit(user_id: int, max_requests: int = None) -> tuple:
@@ -62,19 +62,7 @@ def check_rate_limit(user_id: int, max_requests: int = None) -> tuple:
     """
     if max_requests is None:
         max_requests = DEFAULT_RATE_LIMIT
-
-    now = time.time()
-    window = 60  # 1分钟窗口
-
-    # 清理过期记录
-    _request_log[user_id] = [t for t in _request_log[user_id] if now - t < window]
-
-    if len(_request_log[user_id]) >= max_requests:
-        wait = int(window - (now - _request_log[user_id][0])) + 1
-        return False, max(wait, 1)
-
-    _request_log[user_id].append(now)
-    return True, 0
+    return check_request_limit(str(user_id), max_requests, window_seconds=60)
 
 
 # ==================== 输入净化 ====================

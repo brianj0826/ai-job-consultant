@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from backend.services.access import current_user_id
-from backend.services.auth import require_csrf, require_current_user
+from backend.services.auth import require_business_csrf, require_current_user
 from backend.services.crawler import fetch_and_index, fetch_url as crawl_fetch
-from backend.services.rag import ALLOWED_EXTENSIONS, get_collection, index_document
+from backend.services.rag import ALLOWED_EXTENSIONS, get_collection, index_document, rag_disabled
 
 
 router = APIRouter()
@@ -18,12 +18,14 @@ class ImportUrlRequest(BaseModel):
     url: str
 
 
-@router.post("/upload", dependencies=[Depends(require_csrf)])
+@router.post("/upload", dependencies=[Depends(require_business_csrf)])
 def upload_document(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_current_user),
 ):
     """Index a document in the authenticated user's private collection."""
+    if rag_disabled():
+        raise HTTPException(status_code=503, detail="Document indexing is disabled")
     filename = file.filename or "upload"
     _, ext = os.path.splitext(filename)
     ext = ext.lower()
@@ -50,6 +52,8 @@ def upload_document(
 @router.get("/status")
 def document_status(current_user: dict = Depends(require_current_user)):
     """Return sources and counts from the current user's knowledge base."""
+    if rag_disabled():
+        return {"doc_count": 0, "sources": [], "disabled": True}
     collection = get_collection(current_user_id(current_user))
     count = collection.count()
     sources = []
@@ -80,12 +84,14 @@ def document_status(current_user: dict = Depends(require_current_user)):
     return {"doc_count": count, "sources": sources}
 
 
-@router.post("/import-url", dependencies=[Depends(require_csrf)])
+@router.post("/import-url", dependencies=[Depends(require_business_csrf)])
 def import_url(
     req: ImportUrlRequest,
     current_user: dict = Depends(require_current_user),
 ):
     """Fetch and index a web page for the authenticated user."""
+    if rag_disabled():
+        raise HTTPException(status_code=503, detail="Document indexing is disabled")
     result = fetch_and_index(req.url, current_user_id(current_user))
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -119,12 +125,14 @@ class DeleteSourceRequest(BaseModel):
     source: str
 
 
-@router.delete("/source", dependencies=[Depends(require_csrf)])
+@router.delete("/source", dependencies=[Depends(require_business_csrf)])
 def delete_source(
     req: DeleteSourceRequest,
     current_user: dict = Depends(require_current_user),
 ):
     """Delete a source only from the authenticated user's collection."""
+    if rag_disabled():
+        raise HTTPException(status_code=503, detail="Document indexing is disabled")
     source = req.source.strip()
     if not source:
         raise HTTPException(status_code=400, detail="来源不能为空")

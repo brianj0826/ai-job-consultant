@@ -8,7 +8,10 @@ logger = logging.getLogger("aiagent.deepseek")
 
 load_dotenv()
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-API_URL = "https://api.deepseek.com/chat/completions"
+API_URL = (
+    os.getenv("DEEPSEEK_API_URL")
+    or "https://api.deepseek.com/chat/completions"
+).strip()
 
 def get_ai_response(messages, max_retries=2, timeout=30):
     headers = {

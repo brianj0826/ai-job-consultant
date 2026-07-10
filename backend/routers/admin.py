@@ -3,11 +3,16 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from backend.services import admin as admin_service
-from backend.services.auth import require_admin, require_admin_csrf, request_metadata
+from backend.services.auth import (
+    request_metadata,
+    require_admin,
+    require_admin_csrf,
+    require_super_admin_csrf,
+)
 
 
 router = APIRouter()
@@ -81,6 +86,26 @@ def update_user_role(
             request_metadata(request),
         )
         return {"user": user}
+    except admin_service.AdminActionError as error:
+        raise _admin_error(error) from error
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(
+    user_id: int,
+    request: Request,
+    response: Response,
+    current_user: dict = Depends(require_super_admin_csrf),
+):
+    """Generate a temporary password that must be replaced on next login."""
+    try:
+        result = admin_service.reset_user_password(
+            current_user,
+            user_id,
+            request_metadata(request),
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return result
     except admin_service.AdminActionError as error:
         raise _admin_error(error) from error
 

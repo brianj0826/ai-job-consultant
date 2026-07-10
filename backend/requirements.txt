@@ -9,3 +9,5 @@ python-dotenv
 pymysql
 cryptography
 python-docx
+tzdata>=2024.1
+redis>=5.0,<7.0
