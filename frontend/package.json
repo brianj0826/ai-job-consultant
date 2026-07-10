@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:e2e": "vite --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{js,vue}\"",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "test:all": "npm run lint && npm run test:run && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.0",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vue/test-utils": "^2.4.11",
     "eslint": "^10.6.0",

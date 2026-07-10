@@ -372,12 +372,6 @@ const triggerAction = (action) => emit('action', action)
     transform var(--duration-control) var(--ease-standard);
 }
 
-.task-card:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-hover);
-  transform: translateY(-2px);
-}
-
 .task-card:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 3px;
@@ -420,11 +414,9 @@ const triggerAction = (action) => emit('action', action)
 .task-arrow {
   color: var(--color-text-muted);
   font-size: 1rem;
-  transition: color var(--duration-control) var(--ease-standard);
-}
-
-.task-card:hover .task-arrow {
-  color: var(--color-primary);
+  transition:
+    color var(--duration-control) var(--ease-standard),
+    transform var(--duration-control) var(--ease-standard);
 }
 
 .career-playbook {
@@ -576,8 +568,22 @@ const triggerAction = (action) => emit('action', action)
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (hover: hover) and (pointer: fine) {
   .task-card:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-hover);
+    transform: translateY(-2px);
+  }
+
+  .task-card:hover .task-arrow {
+    color: var(--color-primary);
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-card:hover,
+  .task-card:hover .task-arrow {
     transform: none;
   }
 }

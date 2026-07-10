@@ -66,7 +66,7 @@
             <el-input
               v-model="form.password"
               :prefix-icon="Lock"
-              autocomplete="current-password"
+              :autocomplete="isRegister ? 'new-password' : 'current-password'"
               placeholder="请输入密码"
               show-password
               size="large"
@@ -74,17 +74,31 @@
             />
           </el-form-item>
 
-          <el-form-item v-if="isRegister" label="确认密码" prop="confirmPassword">
-            <el-input
-              v-model="form.confirmPassword"
-              :prefix-icon="Lock"
-              autocomplete="new-password"
-              placeholder="请再次输入密码"
-              show-password
-              size="large"
-              type="password"
-            />
-          </el-form-item>
+          <div
+            class="confirm-field"
+            :class="{ 'confirm-field--open': isRegister }"
+            :aria-hidden="isRegister ? undefined : 'true'"
+            :inert="!isRegister"
+          >
+            <div class="confirm-field__inner">
+              <el-form-item label="确认密码" prop="confirmPassword">
+                <el-input
+                  v-model="form.confirmPassword"
+                  :prefix-icon="Lock"
+                  :disabled="!isRegister"
+                  autocomplete="new-password"
+                  placeholder="请再次输入密码"
+                  show-password
+                  size="large"
+                  type="password"
+                />
+              </el-form-item>
+            </div>
+          </div>
+
+          <Transition name="submit-error">
+            <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
+          </Transition>
 
           <el-button
             class="submit-btn"
@@ -114,7 +128,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 import {
   Aim,
   ChatDotRound,
@@ -131,6 +145,8 @@ const emit = defineEmits(['login-success'])
 
 const isRegister = ref(false)
 const loading = ref(false)
+const formRef = ref(null)
+const submitError = ref('')
 const form = reactive({
   username: '',
   password: '',
@@ -146,7 +162,11 @@ const rules = {
   confirmPassword: [
     {
       validator: (rule, value, callback) => {
-        if (value !== form.password) {
+        if (!isRegister.value) {
+          callback()
+        } else if (!value) {
+          callback(new Error('请再次输入密码'))
+        } else if (value !== form.password) {
           callback(new Error('两次密码不一致'))
         } else {
           callback()
@@ -158,18 +178,26 @@ const rules = {
 }
 
 const toggleMode = () => {
+  if (loading.value) return
   isRegister.value = !isRegister.value
+  submitError.value = ''
   form.password = ''
   form.confirmPassword = ''
+  nextTick(() => formRef.value?.clearValidate())
+}
+
+const focusFirstInvalidField = async () => {
+  await nextTick()
+  const firstInvalidInput = formRef.value?.$el?.querySelector('.el-form-item.is-error input')
+  firstInvalidInput?.focus()
 }
 
 const handleSubmit = async () => {
-  if (!form.username || !form.password) {
-    ElMessage.warning('请填写用户名和密码')
-    return
-  }
-  if (isRegister.value && form.password !== form.confirmPassword) {
-    ElMessage.warning('两次密码不一致')
+  if (loading.value || !formRef.value) return
+  submitError.value = ''
+  const isValid = await formRef.value.validate().catch(() => false)
+  if (!isValid) {
+    await focusFirstInvalidField()
     return
   }
 
@@ -188,8 +216,9 @@ const handleSubmit = async () => {
         res = await login(form.username, form.password)
       } catch (e) {
         if (e.response?.status === 401) {
-          ElMessage.error('用户名或密码错误')
-          loading.value = false
+          submitError.value = '用户名或密码错误'
+          await nextTick()
+          formRef.value?.$el?.querySelector('input[type="password"]')?.focus()
           return
         }
         // 兼容旧版无密码登录
@@ -200,8 +229,7 @@ const handleSubmit = async () => {
       emit('login-success', res.data.user_id, form.username)
     }
   } catch (e) {
-    const msg = e.response?.data?.detail || '操作失败'
-    ElMessage.error(msg)
+    submitError.value = e.response?.data?.detail || '操作失败，请稍后重试。'
   } finally {
     loading.value = false
   }
@@ -222,7 +250,8 @@ const handleSubmit = async () => {
   min-height: 100dvh;
   place-items: center;
   isolation: isolate;
-  overflow: hidden;
+  overflow: clip;
+  overflow-anchor: none;
   padding: var(--space-6);
   background:
     radial-gradient(
@@ -286,7 +315,7 @@ const handleSubmit = async () => {
   background: var(--color-surface-glass, var(--color-surface));
   box-shadow: var(--shadow-dialog);
   backdrop-filter: blur(18px);
-  animation: panel-arrive 420ms var(--ease-standard) both;
+  animation: panel-arrive var(--duration-hero, 420ms) var(--ease-enter, var(--ease-standard)) both;
 }
 
 .brand-side {
@@ -471,6 +500,63 @@ const handleSubmit = async () => {
   margin-bottom: var(--space-5);
 }
 
+.auth-form {
+  min-height: 22rem;
+}
+
+.confirm-field {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--duration-content, 220ms) var(--ease-enter, var(--ease-standard)),
+    opacity var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard));
+}
+
+.confirm-field--open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition-timing-function: var(--ease-enter, var(--ease-standard));
+}
+
+.confirm-field__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.submit-error {
+  margin: calc(var(--space-2) * -1) 0 var(--space-3);
+  color: var(--color-danger);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.submit-error-enter-active {
+  transition:
+    max-height var(--duration-content-exit, 160ms) var(--ease-enter, var(--ease-standard)),
+    opacity var(--duration-content-exit, 160ms) var(--ease-enter, var(--ease-standard)),
+    transform var(--duration-content-exit, 160ms) var(--ease-enter, var(--ease-standard));
+}
+
+.submit-error-leave-active {
+  transition:
+    max-height var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard)),
+    opacity var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard)),
+    transform var(--duration-content-exit, 160ms) var(--ease-exit, var(--ease-standard));
+}
+
+.submit-error-enter-from,
+.submit-error-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.submit-error-enter-to,
+.submit-error-leave-from {
+  max-height: 3rem;
+}
+
 .auth-form :deep(.el-form-item__label) {
   padding-bottom: var(--space-2);
   color: var(--color-text-secondary);
@@ -487,6 +573,12 @@ const handleSubmit = async () => {
   background: var(--color-surface);
 }
 
+.auth-form :deep(.el-form-item__error) {
+  position: static;
+  padding-top: var(--space-1);
+  animation: form-error-arrive var(--duration-content-exit, 160ms) var(--ease-enter, var(--ease-standard)) both;
+}
+
 .submit-btn {
   width: 100%;
   min-height: 2.75rem;
@@ -499,12 +591,6 @@ const handleSubmit = async () => {
     box-shadow var(--duration-control) var(--ease-standard),
     transform var(--duration-control) var(--ease-standard),
     filter var(--duration-control) var(--ease-standard);
-}
-
-.submit-btn:hover:not(.is-disabled) {
-  box-shadow: 0 1.2rem 2.8rem color-mix(in srgb, var(--color-primary) 34%, transparent);
-  filter: brightness(1.06);
-  transform: translateY(-1px);
 }
 
 .submit-btn:focus-visible {
@@ -543,12 +629,32 @@ const handleSubmit = async () => {
 @keyframes panel-arrive {
   from {
     opacity: 0;
-    transform: translateY(var(--space-4)) scale(0.985);
+    transform: translateY(var(--space-4));
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
+  }
+}
+
+@keyframes form-error-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .submit-btn:hover:not(.is-disabled) {
+    box-shadow: 0 1.2rem 2.8rem color-mix(in srgb, var(--color-primary) 34%, transparent);
+    filter: brightness(1.06);
+    transform: translateY(-1px);
   }
 }
 
@@ -567,6 +673,7 @@ const handleSubmit = async () => {
     width: min(100%, 36rem);
     min-height: 0;
     grid-template-columns: 1fr;
+    backdrop-filter: blur(10px);
   }
 
   .brand-side {
@@ -644,6 +751,16 @@ const handleSubmit = async () => {
 
 @media (prefers-reduced-motion: reduce) {
   .welcome-card.precision-aurora__panel {
+    animation: none;
+  }
+
+  .confirm-field,
+  .submit-error-enter-active,
+  .submit-error-leave-active {
+    transition-duration: 0.01ms;
+  }
+
+  .auth-form :deep(.el-form-item__error) {
     animation: none;
   }
 }

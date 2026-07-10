@@ -4,8 +4,9 @@
     class="report-drawer"
     direction="rtl"
     size="var(--panel-width)"
-    @open="initChart"
-    @closed="disposeChart"
+    @opened="handleDrawerOpened"
+    @close="handleDrawerClose"
+    @closed="handleDrawerClosed"
   >
     <template #header>
       <div class="drawer-heading">
@@ -71,15 +72,25 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Document, DocumentChecked, WarningFilled } from '@element-plus/icons-vue'
 import DOMPurify from 'dompurify'
+import { GaugeChart } from 'echarts/charts'
+import { init as initECharts, use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
 import { marked } from 'marked'
+import { useReducedMotion } from '../composables/useReducedMotion'
+
+use([GaugeChart, CanvasRenderer])
 
 const props = defineProps({
   reportText: { type: String, default: '' }
 })
 
 const visible = ref(false)
+const drawerOpened = ref(false)
 const chartRef = ref(null)
+const { prefersReducedMotion } = useReducedMotion()
 let scoreChart = null
+let chartResizeObserver = null
+let resizeFrame = null
 
 const score = computed(() => {
   const primaryMatch = props.reportText.match(/(?:综合评分|评分)[^\n：:]*[：:]\s*(\d+(?:\.\d+)?)\s*分/i)
@@ -104,34 +115,57 @@ const getToken = (name) => window
   .getPropertyValue(name)
   .trim()
 
+const cancelScheduledResize = () => {
+  if (resizeFrame === null) return
+  cancelAnimationFrame(resizeFrame)
+  resizeFrame = null
+}
+
+const disconnectChartObserver = () => {
+  chartResizeObserver?.disconnect()
+  chartResizeObserver = null
+}
+
 const disposeChart = () => {
+  cancelScheduledResize()
+  disconnectChartObserver()
   if (scoreChart) {
     scoreChart.dispose()
     scoreChart = null
   }
-  window.removeEventListener('resize', resizeChart)
 }
 
-const resizeChart = () => {
-  scoreChart?.resize()
+const scheduleChartResize = () => {
+  if (!scoreChart || resizeFrame !== null) return
+
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = null
+    scoreChart?.resize()
+  })
+}
+
+const observeChartSize = () => {
+  if (!chartRef.value || typeof ResizeObserver === 'undefined') return
+
+  chartResizeObserver = new ResizeObserver(scheduleChartResize)
+  chartResizeObserver.observe(chartRef.value)
 }
 
 const initChart = async () => {
   await nextTick()
-  if (!visible.value || !hasScore.value || !chartRef.value) {
+  if (!visible.value || !drawerOpened.value || !hasScore.value || !chartRef.value) {
     disposeChart()
     return
   }
 
-  const echarts = await import('echarts')
-
-  if (!visible.value || !chartRef.value) return
-
   disposeChart()
-  scoreChart = echarts.init(chartRef.value)
+  scoreChart = initECharts(chartRef.value)
   scoreChart.setOption({
-    animationDuration: 240,
+    animation: !prefersReducedMotion.value,
+    animationDuration: prefersReducedMotion.value ? 0 : 240,
+    animationDurationUpdate: prefersReducedMotion.value ? 0 : 180,
     animationEasing: 'cubicOut',
+    animationEasingUpdate: 'cubicOut',
     series: [{
       type: 'gauge',
       startAngle: 205,
@@ -162,7 +196,21 @@ const initChart = async () => {
       data: [{ value: scorePercent.value }]
     }]
   })
-  window.addEventListener('resize', resizeChart)
+  observeChartSize()
+}
+
+const handleDrawerOpened = () => {
+  drawerOpened.value = true
+  initChart()
+}
+
+const handleDrawerClose = () => {
+  drawerOpened.value = false
+}
+
+const handleDrawerClosed = () => {
+  drawerOpened.value = false
+  disposeChart()
 }
 
 const open = () => {
@@ -173,8 +221,8 @@ const close = () => {
   visible.value = false
 }
 
-watch([() => props.reportText, visible], () => {
-  if (visible.value) initChart()
+watch([() => props.reportText, prefersReducedMotion], () => {
+  if (drawerOpened.value) initChart()
 })
 
 onBeforeUnmount(disposeChart)

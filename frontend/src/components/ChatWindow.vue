@@ -1,135 +1,121 @@
 <template>
-  <section class="chat-container" aria-label="AI 求职顾问对话">
-    <div
-      ref="msgListRef"
-      class="message-list"
-      role="log"
-      aria-live="polite"
-      aria-relevant="additions text"
-    >
-      <div v-if="!messages.length && !streaming" class="chat-empty-state">
-        <div class="empty-icon" aria-hidden="true">
-          <el-icon><ChatDotRound /></el-icon>
-        </div>
-        <p class="technical-label">CAREER INTELLIGENCE</p>
-        <h2>{{ emptyStateTitle }}</h2>
-        <p>{{ emptyStateDescription }}</p>
-      </div>
-
+  <section class="chat-container" aria-label="AI 求职顾问对话" :aria-busy="ariaBusy ? 'true' : 'false'">
+    <div class="conversation-region">
       <div
-        v-for="(msg, index) in messages"
-        :key="msg.id || `${msg.role}-${msg.timestamp || index}-${index}`"
-        :class="['msg-row', msg.role === 'user' ? 'msg-row--user' : 'msg-row--assistant']"
+        ref="msgListRef"
+        class="message-list"
+        role="log"
+        aria-live="off"
+        aria-relevant="additions"
+        :aria-busy="ariaBusy ? 'true' : 'false'"
+        @scroll.passive="handleMessageScroll"
       >
-        <div v-if="msg.role === 'assistant'" class="assistant-avatar" aria-hidden="true">
-          <el-icon><Cpu /></el-icon>
-        </div>
-
-        <div class="msg-body">
-          <article
-            :class="['message-surface', msg.role === 'user' ? 'message-surface--user' : 'message-surface--assistant']"
+        <TransitionGroup
+          tag="div"
+          name="message"
+          class="message-stack"
+          :class="{ 'message-stack--hydrating': hydratingHistory }"
+          :css="!hydratingHistory"
+        >
+          <div
+            v-if="isSessionLoading && showSessionSkeleton"
+            key="session-loading"
+            class="session-skeleton"
+            data-testid="session-skeleton"
+            role="status"
           >
-            <p v-if="msg.role === 'assistant'" class="assistant-label">
-              <el-icon aria-hidden="true"><Cpu /></el-icon>
-              职达 AI
-            </p>
-            <div class="message-content" v-html="renderMarkdown(msg.content)"></div>
-          </article>
-
-          <div :class="['msg-meta', msg.role === 'user' ? 'msg-meta--right' : 'msg-meta--left']">
-            <time v-if="formatTimestamp(msg.timestamp)" :datetime="msg.timestamp">
-              {{ formatTimestamp(msg.timestamp) }}
-            </time>
-
-            <template v-if="msg.role === 'assistant' && msg.sources?.length">
-              <span class="meta-divider" aria-hidden="true"></span>
-              <span class="source-heading">参考资料</span>
-              <template v-for="source in msg.sources" :key="source.id || source.source">
-                <a
-                  v-if="isWebUrl(source.source)"
-                  :href="source.source"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="source-link"
-                  :aria-label="`打开参考资料：${source.title || source.source}`"
-                >
-                  <el-tag class="source-chip" effect="plain" size="small">
-                    <el-icon aria-hidden="true"><Link /></el-icon>
-                    {{ source.title || source.source }}
-                  </el-tag>
-                </a>
-                <el-tag v-else class="source-chip" effect="plain" size="small">
-                  <el-icon aria-hidden="true"><Document /></el-icon>
-                  {{ source.title || source.source }}
-                </el-tag>
-              </template>
-            </template>
-
-            <template v-if="msg.role === 'assistant' && msg.id">
-              <span class="meta-divider" aria-hidden="true"></span>
-              <el-button
-                class="feedback-button"
-                :class="{ 'feedback-button--active': currentFeedback(msg) === 'like' }"
-                text
-                circle
-                size="small"
-                :aria-label="currentFeedback(msg) === 'like' ? '已标记为有帮助' : '标记为有帮助'"
-                :title="currentFeedback(msg) === 'like' ? '已标记为有帮助' : '标记为有帮助'"
-                @click="feedback(msg.id, 'like')"
-              >
-                <el-icon><CircleCheckFilled /></el-icon>
-              </el-button>
-              <el-button
-                class="feedback-button feedback-button--negative"
-                :class="{ 'feedback-button--active': currentFeedback(msg) === 'dislike' }"
-                text
-                circle
-                size="small"
-                :aria-label="currentFeedback(msg) === 'dislike' ? '已标记为需要改进' : '标记为需要改进'"
-                :title="currentFeedback(msg) === 'dislike' ? '已标记为需要改进' : '标记为需要改进'"
-                @click="feedback(msg.id, 'dislike')"
-              >
-                <el-icon><CircleCloseFilled /></el-icon>
-              </el-button>
-            </template>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="streaming" class="msg-row msg-row--assistant msg-row--streaming">
-        <div class="assistant-avatar" aria-hidden="true">
-          <el-icon><Cpu /></el-icon>
-        </div>
-        <div class="msg-body">
-          <article class="message-surface message-surface--assistant message-surface--streaming">
-            <p class="assistant-label">
-              <el-icon aria-hidden="true"><Cpu /></el-icon>
-              职达 AI
-            </p>
-            <div v-if="streamingText" class="message-content" v-html="renderMarkdown(streamingText)"></div>
-            <div v-else class="streaming-placeholder">
-              <el-icon class="is-loading" aria-hidden="true"><Loading /></el-icon>
-              正在整理回复
+            <span class="sr-only">正在加载会话记录</span>
+            <div v-for="index in 3" :key="index" class="session-skeleton__row" aria-hidden="true">
+              <span class="session-skeleton__avatar"></span>
+              <span class="session-skeleton__bubble">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
             </div>
-          </article>
-          <p class="streaming-status" role="status">
-            <span class="streaming-pulse" aria-hidden="true"></span>
-            正在生成回复
-          </p>
-        </div>
+          </div>
+
+          <div
+            v-else-if="hasSessionError"
+            key="session-error"
+            class="session-error-state"
+            data-testid="session-error"
+            role="alert"
+          >
+            <el-icon class="state-icon" aria-hidden="true"><WarningFilled /></el-icon>
+            <div>
+              <strong>会话记录加载失败</strong>
+              <p>{{ sessionError || '暂时无法读取当前会话，请稍后重试。' }}</p>
+              <el-button size="small" plain @click="retrySession">
+                <el-icon aria-hidden="true"><RefreshRight /></el-icon>
+                重新加载
+              </el-button>
+            </div>
+          </div>
+
+          <div
+            v-else-if="conversationReady && !messages.length && !activeReplyVisible"
+            key="chat-empty"
+            class="chat-empty-state"
+          >
+            <div class="empty-icon" aria-hidden="true">
+              <el-icon><ChatDotRound /></el-icon>
+            </div>
+            <p class="technical-label">CAREER INTELLIGENCE</p>
+            <h2>{{ emptyStateTitle }}</h2>
+            <p>{{ emptyStateDescription }}</p>
+          </div>
+
+          <MessageBubble
+            v-for="(message, index) in visibleMessages"
+            :key="messageKey(message, index)"
+            v-memo="[message.content, message.feedback, currentFeedback(message)]"
+            :message="message"
+            :feedback-value="currentFeedback(message)"
+            @feedback="feedback"
+          />
+
+          <MessageBubble
+            v-if="conversationReady && activeReplyVisible"
+            :key="activeStreamKey"
+            :message="activeMessage"
+            :rendered-html="streamRendered"
+            :streaming="streaming"
+            :interrupted="interrupted"
+            :error="connectionError"
+            @retry="retryLastMessage"
+          />
+
+          <div
+            v-if="conversationReady && standaloneError"
+            key="composer-error"
+            class="chat-error-state"
+            role="alert"
+          >
+            <el-icon class="state-icon" aria-hidden="true"><WarningFilled /></el-icon>
+            <div>
+              <strong>暂时无法发送</strong>
+              <p>{{ standaloneError }}</p>
+            </div>
+          </div>
+        </TransitionGroup>
       </div>
 
-      <div v-if="connectionError" class="chat-error-state" role="alert">
-        <el-icon class="error-icon" aria-hidden="true"><WarningFilled /></el-icon>
-        <div>
-          <strong>回复未完成</strong>
-          <p>{{ connectionError }}</p>
-          <el-button v-if="lastRequest" size="small" plain @click="retryLastMessage">
-            重新尝试
-          </el-button>
-        </div>
-      </div>
+      <Transition name="jump-latest">
+        <el-button
+          v-if="showBackToLatest"
+          class="back-to-latest"
+          size="small"
+          round
+          @click="goToLatest"
+        >
+          <el-icon aria-hidden="true"><ArrowDown /></el-icon>
+          回到最新
+        </el-button>
+      </Transition>
     </div>
+
+    <p class="sr-only" aria-live="polite" aria-atomic="true">{{ finalAnnouncement }}</p>
 
     <form class="input-area" @submit.prevent="send">
       <div class="input-shell">
@@ -141,14 +127,14 @@
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 5 }"
           placeholder="描述你的求职问题，或粘贴一段职位描述…"
-          :disabled="streaming"
+          :disabled="composerDisabled"
           @keydown.enter.exact.prevent="send"
         />
         <el-button
           class="send-button"
           native-type="submit"
           type="primary"
-          :disabled="!input.trim() || streaming"
+          :disabled="!input.trim() || composerDisabled"
           :loading="streaming"
           aria-label="发送消息"
         >
@@ -158,6 +144,7 @@
       </div>
       <p class="input-helper">
         <span v-if="streaming">AI 正在生成回复，请稍候。</span>
+        <span v-else-if="isSessionLoading">正在载入当前会话。</span>
         <span v-else>按 Enter 发送，Shift + Enter 换行。</span>
       </p>
     </form>
@@ -165,38 +152,85 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  ArrowDown,
   ArrowUp,
   ChatDotRound,
-  CircleCheckFilled,
-  CircleCloseFilled,
-  Cpu,
-  Document,
-  Link,
-  Loading,
+  RefreshRight,
   WarningFilled
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { submitFeedback } from '../api'
+import { useStreamingBuffer } from '../composables/useStreamingBuffer'
+import MessageBubble from './MessageBubble.vue'
+
+const SESSION_SKELETON_DELAY = 150
+const AUTO_FOLLOW_THRESHOLD = 80
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
   sessionId: Number,
   userId: Number,
-  quickText: { type: String, default: '' }
+  quickText: { type: String, default: '' },
+  sessionStatus: {
+    type: String,
+    default: 'ready',
+    validator: (value) => ['idle', 'loading', 'ready', 'error'].includes(value)
+  },
+  sessionError: { type: String, default: '' }
 })
-const emit = defineEmits(['send-message', 'kb-updated'])
+
+const emit = defineEmits(['send-message', 'kb-updated', 'retry-session'])
 
 const input = ref('')
 const msgListRef = ref(null)
-const streamingText = ref('')
 const streaming = ref(false)
+const interrupted = ref(false)
 const connectionError = ref('')
+const standaloneError = ref('')
 const lastRequest = ref('')
 const localFeedback = ref({})
+const activeStreamKey = ref('stream-0')
+const finalAnnouncement = ref('')
+const isNearBottom = ref(true)
+const hydratingHistory = ref(true)
+const showSessionSkeleton = ref(false)
+
+let streamSequence = 0
+let scrollFrame = null
+let scrollForce = false
+let hydrationFrame = null
+let skeletonTimer = null
+
+const cleanSourceMarkers = (text) => text?.replace(/【来源\d+[^】]*】/g, '') || ''
+const renderStreamingMarkdown = (text) => (
+  text ? DOMPurify.sanitize(marked(cleanSourceMarkers(text))) : ''
+)
+
+const {
+  append: appendStreamToken,
+  beginReplacement,
+  flush: flushStream,
+  rendered: streamRendered,
+  reset: resetStream,
+  text: streamText
+} = useStreamingBuffer({ render: renderStreamingMarkdown })
+
+const isSessionLoading = computed(() => props.sessionStatus === 'loading')
+const hasSessionError = computed(() => props.sessionStatus === 'error')
+const conversationReady = computed(() => !isSessionLoading.value && !hasSessionError.value)
+const composerDisabled = computed(() => streaming.value || isSessionLoading.value || hasSessionError.value)
+const ariaBusy = computed(() => streaming.value || isSessionLoading.value)
+const activeReplyVisible = computed(() => streaming.value || interrupted.value)
+const visibleMessages = computed(() => conversationReady.value ? props.messages : [])
+const activeMessage = computed(() => ({
+  role: 'assistant',
+  content: streamText.value,
+  timestamp: ''
+}))
 
 const emptyStateTitle = computed(() => (
   props.sessionId ? '开始你的职业对话' : '选择一个会话后开始对话'
@@ -207,34 +241,131 @@ const emptyStateDescription = computed(() => (
     : '从左侧新建或选择会话，职达 AI 会在这里保留完整上下文。'
 ))
 
-const isWebUrl = (value) => value && /^(https?:\/\/)/i.test(value)
+const messageKey = (message, index) => (
+  message._clientKey || message.id || `${message.role}-${message.timestamp || index}-${index}`
+)
+
+const requestFrame = (callback) => (
+  typeof window.requestAnimationFrame === 'function'
+    ? window.requestAnimationFrame(callback)
+    : window.setTimeout(callback, 16)
+)
+const cancelFrame = (frame) => {
+  if (frame === null) return
+  if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(frame)
+  else window.clearTimeout(frame)
+}
+
+const distanceFromBottom = (element) => Math.max(
+  0,
+  element.scrollHeight - element.scrollTop - element.clientHeight
+)
+
+const handleMessageScroll = () => {
+  if (!msgListRef.value) return
+  isNearBottom.value = distanceFromBottom(msgListRef.value) <= AUTO_FOLLOW_THRESHOLD
+}
+
+const scheduleScrollToBottom = ({ force = false } = {}) => {
+  scrollForce = scrollForce || force
+  if (scrollFrame !== null) return
+
+  scrollFrame = requestFrame(() => {
+    scrollFrame = null
+    const shouldScroll = scrollForce || isNearBottom.value
+    scrollForce = false
+    if (!shouldScroll || !msgListRef.value) return
+    msgListRef.value.scrollTop = msgListRef.value.scrollHeight
+    isNearBottom.value = true
+  })
+}
+
+const goToLatest = () => {
+  isNearBottom.value = true
+  scheduleScrollToBottom({ force: true })
+}
+
+const showBackToLatest = computed(() => (
+  conversationReady.value
+  && !isNearBottom.value
+  && (props.messages.length > 0 || activeReplyVisible.value)
+))
+
+const finishHistoryHydration = () => {
+  cancelFrame(hydrationFrame)
+  hydrationFrame = requestFrame(() => {
+    hydrationFrame = null
+    hydratingHistory.value = false
+    scheduleScrollToBottom({ force: true })
+  })
+}
+
+const beginHistoryHydration = () => {
+  cancelFrame(hydrationFrame)
+  hydrationFrame = null
+  hydratingHistory.value = true
+}
+
+const syncSessionState = (status) => {
+  if (skeletonTimer !== null) {
+    clearTimeout(skeletonTimer)
+    skeletonTimer = null
+  }
+
+  if (status === 'loading') {
+    beginHistoryHydration()
+    showSessionSkeleton.value = false
+    skeletonTimer = setTimeout(() => {
+      skeletonTimer = null
+      if (props.sessionStatus === 'loading') showSessionSkeleton.value = true
+    }, SESSION_SKELETON_DELAY)
+    return
+  }
+
+  showSessionSkeleton.value = false
+  nextTick(finishHistoryHydration)
+}
 
 const send = () => {
   const text = input.value.trim()
-  if (!text || streaming.value) return
+  if (!text || composerDisabled.value) return
 
   if (!props.sessionId || !props.userId) {
-    connectionError.value = '请先登录并选择一个会话后再发送消息。'
+    standaloneError.value = '请先登录并选择一个会话后再发送消息。'
     ElMessage.warning('请先登录并选择会话')
     return
   }
 
   input.value = ''
-  requestReply(text, true)
+  requestReply(text, true, false)
 }
 
 const retryLastMessage = () => {
   if (!lastRequest.value || streaming.value) return
   if (!props.sessionId || !props.userId) {
     connectionError.value = '当前会话不可用，请重新选择会话后再尝试。'
+    interrupted.value = true
     return
   }
-  requestReply(lastRequest.value, false)
+  requestReply(lastRequest.value, false, true)
 }
 
-const requestReply = async (text, shouldEmitUser) => {
+const requestReply = async (text, shouldEmitUser, reuseBubble) => {
   connectionError.value = ''
+  standaloneError.value = ''
+  finalAnnouncement.value = ''
   lastRequest.value = text
+
+  if (reuseBubble) {
+    beginReplacement()
+  } else {
+    streamSequence += 1
+    activeStreamKey.value = `stream-${streamSequence}`
+    resetStream()
+  }
+
+  interrupted.value = false
+  streaming.value = true
 
   if (shouldEmitUser) {
     emit('send-message', [{
@@ -244,9 +375,7 @@ const requestReply = async (text, shouldEmitUser) => {
     }])
   }
 
-  streaming.value = true
-  streamingText.value = ''
-  scrollToBottom()
+  scheduleScrollToBottom({ force: true })
 
   try {
     const response = await fetch('/api/chat/stream', {
@@ -277,6 +406,19 @@ const requestReply = async (text, shouldEmitUser) => {
     let buffer = ''
     let finalData = null
 
+    const processEventLine = (line) => {
+      if (!line.startsWith('data: ')) return
+      try {
+        const data = JSON.parse(line.slice(6))
+        if (data.token) appendStreamToken(data.token)
+        else if (data.done) finalData = data
+        else if (data.error) throw new Error(data.error)
+      } catch (error) {
+        if (error instanceof SyntaxError) return
+        throw error
+      }
+    }
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -284,78 +426,43 @@ const requestReply = async (text, shouldEmitUser) => {
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.token) {
-            streamingText.value += data.token
-            scrollToBottom()
-          } else if (data.done) {
-            finalData = data
-          } else if (data.error) {
-            throw new Error(data.error)
-          }
-        } catch (error) {
-          if (error instanceof SyntaxError) continue
-          throw error
-        }
-      }
+      lines.forEach(processEventLine)
     }
 
-    if (!finalData?.done) {
-      throw new Error('连接已中断，未收到完整回复。')
-    }
+    buffer += decoder.decode()
+    if (buffer) buffer.split('\n').forEach(processEventLine)
 
+    if (!finalData?.done) throw new Error('连接已中断，未收到完整回复。')
+
+    const finalText = flushStream()
     const aiMessage = {
       role: 'assistant',
-      content: streamingText.value,
+      content: finalText,
       id: finalData.msg_id || null,
       sources: finalData.sources || [],
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      _clientKey: activeStreamKey.value
     }
+
     emit('send-message', [aiMessage])
     if (aiMessage.sources.length) emit('kb-updated')
     lastRequest.value = ''
+    interrupted.value = false
+    streaming.value = false
+    nextTick(() => {
+      finalAnnouncement.value = '职达 AI 的回复已完成。'
+      scheduleScrollToBottom()
+    })
   } catch (error) {
+    flushStream()
     connectionError.value = error instanceof Error
       ? error.message
       : '连接失败，请稍后重试。'
+    interrupted.value = true
   } finally {
     streaming.value = false
-    streamingText.value = ''
-    scrollToBottom()
+    scheduleScrollToBottom()
   }
-}
-
-const cleanSourceMarkers = (text) => {
-  if (!text) return ''
-  return text.replace(/【来源\d+[^】]*】/g, '')
-}
-
-const renderMarkdown = (text) => {
-  if (!text) return ''
-  return DOMPurify.sanitize(marked(cleanSourceMarkers(text)))
-}
-
-const formatTimestamp = (value) => {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
-
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (msgListRef.value) {
-      msgListRef.value.scrollTop = msgListRef.value.scrollHeight
-    }
-  })
 }
 
 const currentFeedback = (message) => localFeedback.value[message.id] ?? message.feedback
@@ -370,14 +477,37 @@ const feedback = async (messageId, type) => {
   }
 }
 
+const retrySession = () => emit('retry-session', props.sessionId)
+
 watch(() => props.quickText, (text) => {
-  if (text) {
-    input.value = text.trim()
-    nextTick(send)
-  }
+  if (!text) return
+  input.value = text.trim()
+  nextTick(send)
+}, { immediate: true })
+
+watch(() => props.sessionId, () => {
+  beginHistoryHydration()
+  if (!isSessionLoading.value) nextTick(finishHistoryHydration)
 })
 
-watch(() => props.messages, scrollToBottom, { deep: true, flush: 'post' })
+watch(() => props.sessionStatus, syncSessionState, { immediate: true })
+
+watch(() => props.messages, () => {
+  nextTick(() => scheduleScrollToBottom({ force: hydratingHistory.value }))
+})
+
+watch(streamRendered, () => scheduleScrollToBottom())
+
+onMounted(() => {
+  handleMessageScroll()
+  if (!isSessionLoading.value) finishHistoryHydration()
+})
+
+onBeforeUnmount(() => {
+  cancelFrame(scrollFrame)
+  cancelFrame(hydrationFrame)
+  if (skeletonTimer !== null) clearTimeout(skeletonTimer)
+})
 </script>
 
 <style scoped>
@@ -389,14 +519,23 @@ watch(() => props.messages, scrollToBottom, { deep: true, flush: 'post' })
   background: var(--color-canvas);
 }
 
-.message-list {
-  display: flex;
+.conversation-region {
+  position: relative;
   flex: 1;
-  flex-direction: column;
-  gap: var(--space-6);
   min-height: 0;
+}
+
+.message-list {
+  height: 100%;
   overflow-y: auto;
   padding: var(--space-8) var(--page-padding) var(--space-4);
+}
+
+.message-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: 100%;
 }
 
 .chat-empty-state {
@@ -439,271 +578,69 @@ watch(() => props.messages, scrollToBottom, { deep: true, flush: 'post' })
   line-height: var(--line-height-body-large);
 }
 
-.msg-row {
-  display: flex;
-  gap: var(--space-3);
+.session-skeleton {
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
   width: min(100%, var(--chat-max-width));
 }
 
-.msg-row--assistant {
-  align-self: flex-start;
+.session-skeleton__row {
+  display: flex;
+  gap: var(--space-3);
+  width: min(100%, 42rem);
 }
 
-.msg-row--user {
+.session-skeleton__row:nth-child(even) {
   align-self: flex-end;
-  width: min(76%, 38rem);
+  width: min(72%, 34rem);
+  flex-direction: row-reverse;
 }
 
-.assistant-avatar {
-  display: grid;
+.session-skeleton__avatar,
+.session-skeleton__bubble span {
+  background: linear-gradient(
+    100deg,
+    var(--color-surface-subtle) 20%,
+    var(--color-surface-hover) 45%,
+    var(--color-surface-subtle) 70%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.session-skeleton__avatar {
   width: 2rem;
   height: 2rem;
   flex: 0 0 auto;
-  margin-top: var(--space-1);
-  place-items: center;
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
-  background: var(--color-surface-elevated);
-  box-shadow: var(--shadow-popover);
-  color: var(--color-cyan);
-  font-size: 1rem;
 }
 
-.msg-body {
-  min-width: 0;
+.session-skeleton__bubble {
+  display: grid;
   flex: 1;
-}
-
-.message-surface {
-  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  color: var(--color-text-primary);
-}
-
-.message-surface--assistant {
-  padding: var(--space-5);
   background: var(--color-surface);
-  border-top-left-radius: var(--radius-control);
-  box-shadow: var(--shadow-card);
 }
 
-.message-surface--user {
-  padding: var(--space-4) var(--space-5);
-  border-color: var(--color-primary);
-  border-top-right-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
-.assistant-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-3);
-  color: var(--color-cyan);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  letter-spacing: .04em;
-}
-
-.message-content {
-  max-width: 70ch;
-  overflow-wrap: anywhere;
-  font-size: var(--font-size-body);
-  line-height: 1.8;
-}
-
-.message-surface--user .message-content {
-  margin-left: auto;
-}
-
-.message-content :deep(h1),
-.message-content :deep(h2),
-.message-content :deep(h3),
-.message-content :deep(h4) {
-  margin: var(--space-5) 0 var(--space-2);
-  color: inherit;
-  font-size: var(--font-size-component-title);
-  line-height: var(--line-height-component-title);
-}
-
-.message-content :deep(h1:first-child),
-.message-content :deep(h2:first-child),
-.message-content :deep(h3:first-child),
-.message-content :deep(h4:first-child),
-.message-content :deep(p:first-child) {
-  margin-top: 0;
-}
-
-.message-content :deep(p),
-.message-content :deep(ul),
-.message-content :deep(ol),
-.message-content :deep(blockquote) {
-  margin: 0 0 var(--space-3);
-}
-
-.message-content :deep(ul),
-.message-content :deep(ol) {
-  padding-left: var(--space-5);
-}
-
-.message-content :deep(li + li) {
-  margin-top: var(--space-1);
-}
-
-.message-content :deep(blockquote) {
-  padding-left: var(--space-4);
-  border-left: 2px solid var(--color-cyan);
-  color: var(--color-text-secondary);
-}
-
-.message-content :deep(code) {
-  padding: .12em .36em;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface-subtle);
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
-  font-size: .9em;
-}
-
-.message-surface--user .message-content :deep(code) {
-  border-color: var(--color-primary-hover);
-  background: var(--color-primary-pressed);
-  color: var(--color-on-primary);
-}
-
-.message-content :deep(pre) {
-  margin: var(--space-4) 0;
-  padding: var(--space-4);
-  overflow-x: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface-subtle);
-}
-
-.message-content :deep(pre code) {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.message-surface--user .message-content :deep(a) {
-  color: var(--color-on-primary);
-}
-
-.msg-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 1.5rem;
-  margin-top: var(--space-2);
-  padding: 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-}
-
-.msg-meta--right {
-  justify-content: flex-end;
-}
-
-.msg-meta--left {
-  flex-wrap: wrap;
-}
-
-.meta-divider {
-  width: .18rem;
-  height: .18rem;
+.session-skeleton__bubble span {
+  height: .7rem;
   border-radius: var(--radius-pill);
-  background: var(--color-border-strong);
 }
 
-.source-heading {
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: .68rem;
-  letter-spacing: .04em;
+.session-skeleton__bubble span:nth-child(2) {
+  width: 88%;
 }
 
-.source-link {
-  color: inherit;
-  text-decoration: none;
+.session-skeleton__bubble span:nth-child(3) {
+  width: 62%;
 }
 
-.source-chip {
-  --el-tag-bg-color: var(--color-surface-subtle);
-  --el-tag-border-color: var(--color-border);
-  --el-tag-text-color: var(--color-text-secondary);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  max-width: 16rem;
-}
-
-.source-chip :deep(.el-tag__content) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.feedback-button {
-  --el-button-text-color: var(--color-text-muted);
-  --el-button-hover-text-color: var(--color-success);
-  --el-button-hover-bg-color: var(--color-success-soft);
-  width: 1.5rem;
-  min-height: 1.5rem;
-  padding: 0;
-}
-
-.feedback-button--negative {
-  --el-button-hover-text-color: var(--color-danger);
-  --el-button-hover-bg-color: var(--color-danger-soft);
-}
-
-.feedback-button--active {
-  --el-button-text-color: var(--color-success);
-  --el-button-bg-color: var(--color-success-soft);
-}
-
-.feedback-button--negative.feedback-button--active {
-  --el-button-text-color: var(--color-danger);
-  --el-button-bg-color: var(--color-danger-soft);
-}
-
-.message-surface--streaming {
-  min-width: min(34rem, 100%);
-}
-
-.streaming-placeholder,
-.streaming-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-caption);
-}
-
-.streaming-placeholder {
-  min-height: 2rem;
-}
-
-.streaming-status {
-  margin: var(--space-2) 0 0;
-  padding: 0 var(--space-2);
-}
-
-.streaming-pulse {
-  width: .45rem;
-  height: .45rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-cyan);
-  box-shadow: 0 0 0 .18rem var(--color-info-soft);
-  animation: streaming-pulse 1.5s var(--ease-standard) infinite;
-}
-
+.session-error-state,
 .chat-error-state {
   display: flex;
   align-items: flex-start;
@@ -717,20 +654,37 @@ watch(() => props.messages, scrollToBottom, { deep: true, flush: 'post' })
   color: var(--color-text-primary);
 }
 
-.error-icon {
+.session-error-state {
+  margin: auto 0;
+}
+
+.state-icon {
+  flex: 0 0 auto;
   margin-top: .1rem;
   color: var(--color-danger);
   font-size: 1.1rem;
 }
 
+.session-error-state strong,
 .chat-error-state strong {
   display: block;
   margin-bottom: var(--space-1);
 }
 
+.session-error-state p,
 .chat-error-state p {
   margin: 0 0 var(--space-3);
   color: var(--color-text-secondary);
+}
+
+.back-to-latest {
+  position: absolute;
+  right: 50%;
+  bottom: var(--space-4);
+  z-index: 2;
+  margin: 0;
+  box-shadow: var(--shadow-popover);
+  transform: translateX(50%);
 }
 
 .input-area {
@@ -785,36 +739,57 @@ watch(() => props.messages, scrollToBottom, { deep: true, flush: 'post' })
   font-size: var(--font-size-caption);
 }
 
-@keyframes streaming-pulse {
-  0%,
-  100% {
-    opacity: .55;
-    transform: scale(.82);
+.message-enter-active,
+.message-leave-active {
+  transition:
+    opacity 180ms var(--ease-standard),
+    transform 180ms var(--ease-standard);
+}
+
+.message-enter-from {
+  opacity: 0;
+  transform: translateY(var(--space-2));
+}
+
+.message-leave-to {
+  opacity: 0;
+  transform: translateY(calc(var(--space-1) * -1));
+}
+
+.message-move {
+  transition: transform 180ms var(--ease-standard);
+}
+
+.jump-latest-enter-active,
+.jump-latest-leave-active {
+  transition:
+    opacity var(--duration-control) var(--ease-standard),
+    transform var(--duration-control) var(--ease-standard);
+}
+
+.jump-latest-enter-from,
+.jump-latest-leave-to {
+  opacity: 0;
+  transform: translate(50%, var(--space-2));
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
   }
 
-  50% {
-    opacity: 1;
-    transform: scale(1);
+  to {
+    background-position: -100% 0;
   }
 }
 
 @media (max-width: 767px) {
   .message-list {
-    gap: var(--space-5);
     padding-top: var(--space-5);
   }
 
-  .msg-row--user {
-    width: min(88%, 38rem);
-  }
-
-  .message-surface--assistant {
-    padding: var(--space-4);
-  }
-
-  .assistant-avatar {
-    width: 1.75rem;
-    height: 1.75rem;
+  .message-stack {
+    gap: var(--space-5);
   }
 
   .input-area {
