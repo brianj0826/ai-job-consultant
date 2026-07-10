@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend lint, unit, build and E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:run
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-output
+          path: frontend/output/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backend-static:
+    name: Backend syntax and Compose configuration
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --disable-pip-version-check -r backend/requirements-dev.txt
+
+      - name: Run backend tests
+        run: pytest -q backend/tests
+
+      - name: Compile backend modules
+        run: python -m compileall -q backend
+
+      - name: Validate Docker Compose configuration
+        run: docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.ci.yml config --quiet
+
+  docker-smoke:
+    name: Docker MySQL, Redis, FastAPI, Vue and AI-mock smoke
+    needs: backend-static
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build and start the complete Docker stack
+        run: >-
+          docker compose --env-file .env.example
+          -f docker-compose.yml -f docker-compose.ci.yml
+          up -d --build --wait --wait-timeout 420
+          mysql redis deepseek-mock backend frontend
+
+      - name: Run browser smoke test against Docker
+        working-directory: frontend
+        env:
+          DOCKER_E2E_BASE_URL: http://127.0.0.1
+        run: npm run test:e2e:docker
+
+      - name: Show container diagnostics
+        if: failure()
+        run: >-
+          docker compose --env-file .env.example
+          -f docker-compose.yml -f docker-compose.ci.yml
+          logs --no-color --tail=300
+
+      - name: Stop Docker stack
+        if: always()
+        run: >-
+          docker compose --env-file .env.example
+          -f docker-compose.yml -f docker-compose.ci.yml
+          down --volumes --remove-orphans

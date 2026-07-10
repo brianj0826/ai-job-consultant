@@ -1,0 +1,26 @@
+services:
+  deepseek-mock:
+    image: python:3.11-alpine
+    working_dir: /app
+    command: ["python", "deepseek_mock.py"]
+    volumes:
+      - ./backend/tests/deepseek_mock.py:/app/deepseek_mock.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  backend:
+    environment:
+      APP_ENV: test
+      DEEPSEEK_API_KEY: ci-mock-key
+      DEEPSEEK_API_URL: http://deepseek-mock:9000/chat/completions
+      RAG_DISABLED: "true"
+      SESSION_COOKIE_SECURE: "false"
+      RATE_LIMIT_ALLOW_MEMORY_FALLBACK: "false"
+      ADMIN_BOOTSTRAP_USERNAME: root-admin
+      ADMIN_BOOTSTRAP_PASSWORD: AdminPass123!
+    depends_on:
+      deepseek-mock:
+        condition: service_healthy
