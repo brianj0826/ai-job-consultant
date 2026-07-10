@@ -30,15 +30,15 @@ const installMotionMetrics = async (page) => {
   })
 }
 
-const authenticateFromStorage = async (page) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('ai_user_id', '7')
-    localStorage.setItem('ai_username', '动效测试用户')
+const authenticateWithMock = async (page) => {
+  const response = await page.request.post('/api/auth/login', {
+    data: { username: 'career-user', password: 'CareerPass123!' }
   })
+  expect(response.ok()).toBe(true)
 }
 
 const openAuthenticatedChat = async (page) => {
-  await authenticateFromStorage(page)
+  await authenticateWithMock(page)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: '职业工作台' })).toBeVisible()
   await page.getByRole('button', { name: /岗位精准匹配/ }).click()
@@ -47,6 +47,11 @@ const openAuthenticatedChat = async (page) => {
   await expect(page.locator('.streaming-status')).toBeHidden()
   await expect(page.getByRole('textbox', { name: '向职达 AI 提问' })).toBeEnabled()
 }
+
+test.beforeEach(async ({ request }) => {
+  const response = await request.post('/api/__e2e/reset')
+  expect(response.ok()).toBe(true)
+})
 
 const expectNoHorizontalOverflow = async (page) => {
   const dimensions = await page.evaluate(() => ({
@@ -62,6 +67,9 @@ test.describe('responsive motion flows', () => {
     await page.goto('/')
 
     const card = page.locator('.welcome-card')
+    await card.evaluate((element) => Promise.all(
+      element.getAnimations().map((animation) => animation.finished.catch(() => undefined))
+    ))
     const initialBox = await card.boundingBox()
     await page.locator('.mode-link').click()
     await expect(page.getByPlaceholder('请再次输入密码')).toBeEnabled()
@@ -216,11 +224,8 @@ test('reduced motion disables CSS movement', async ({ page }) => {
   })
   expect(duration).toBeLessThanOrEqual(0.00001)
 
-  await page.evaluate(() => {
-    localStorage.setItem('ai_user_id', '7')
-    localStorage.setItem('ai_username', '动效测试用户')
-  })
-  await page.reload()
+  await authenticateWithMock(page)
+  await page.goto('/')
   await expect(page.getByRole('heading', { name: '职业工作台' })).toBeVisible()
   await page.getByRole('button', { name: '数据' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()

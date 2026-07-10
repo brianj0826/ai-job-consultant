@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "dev:e2e": "vite --mode e2e --host 127.0.0.1 --port 4173 --strictPort",
@@ -12,6 +15,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:docker": "playwright test --config playwright.docker.config.js",
     "test:all": "npm run lint && npm run test:run && npm run build && npm run test:e2e"
   },
   "dependencies": {
@@ -21,7 +25,8 @@
     "echarts": "^5.5.0",
     "element-plus": "^2.5.0",
     "marked": "^18.0.5",
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

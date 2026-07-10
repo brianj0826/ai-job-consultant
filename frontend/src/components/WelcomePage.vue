@@ -102,12 +102,15 @@
 
           <el-button
             class="submit-btn"
+            :disabled="retryAfterSeconds > 0"
             :loading="loading"
             size="large"
             type="primary"
             @click="handleSubmit"
           >
-            {{ isRegister ? '创建账号' : '登录并继续' }}
+            {{ retryAfterSeconds > 0
+              ? `${retryAfterSeconds} 秒后重试`
+              : (isRegister ? '创建账号' : '登录并继续') }}
           </el-button>
         </el-form>
 
@@ -120,7 +123,7 @@
 
         <p class="form-note">
           <el-icon aria-hidden="true"><InfoFilled /></el-icon>
-          新用户名可直接登录体验，账号会自动创建。
+          登录凭据通过安全 Cookie 会话处理，浏览器不会保存你的密码。
         </p>
       </section>
     </section>
@@ -128,7 +131,7 @@
 </template>
 
 <script setup>
-import { nextTick, reactive, ref } from 'vue'
+import { nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import {
   Aim,
   ChatDotRound,
@@ -139,25 +142,51 @@ import {
   User
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { login, register } from '../api'
+import { getErrorMessage } from '../api'
+import { useAuth } from '../composables/useAuth'
 
 const emit = defineEmits(['login-success'])
 
 const isRegister = ref(false)
 const loading = ref(false)
+const retryAfterSeconds = ref(0)
 const formRef = ref(null)
 const submitError = ref('')
+const { login, register } = useAuth()
 const form = reactive({
   username: '',
   password: '',
   confirmPassword: ''
 })
+let retryAfterTimer = null
+
+const startRetryAfter = (seconds) => {
+  if (retryAfterTimer !== null) clearInterval(retryAfterTimer)
+  retryAfterSeconds.value = Math.max(1, Number.parseInt(seconds || 1, 10))
+  retryAfterTimer = setInterval(() => {
+    retryAfterSeconds.value = Math.max(0, retryAfterSeconds.value - 1)
+    if (retryAfterSeconds.value === 0) {
+      clearInterval(retryAfterTimer)
+      retryAfterTimer = null
+    }
+  }, 1000)
+}
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 2, max: 64, message: '用户名长度应为 2–64 个字符', trigger: 'blur' }
+  ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 3, message: '密码至少3个字符', trigger: 'blur' }
+    {
+      validator: (_rule, value, callback) => {
+        if (value?.length > 128) callback(new Error('密码不能超过 128 个字符'))
+        else if (isRegister.value && value?.length < 8) callback(new Error('注册密码至少需要 8 个字符'))
+        else callback()
+      },
+      trigger: 'blur'
+    }
   ],
   confirmPassword: [
     {
@@ -193,7 +222,7 @@ const focusFirstInvalidField = async () => {
 }
 
 const handleSubmit = async () => {
-  if (loading.value || !formRef.value) return
+  if (loading.value || retryAfterSeconds.value > 0 || !formRef.value) return
   submitError.value = ''
   const isValid = await formRef.value.validate().catch(() => false)
   if (!isValid) {
@@ -204,16 +233,13 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     if (isRegister.value) {
-      const res = await register(form.username, form.password)
-      ElMessage.success(res.data.message || '注册成功')
-      localStorage.setItem('ai_user_id', res.data.user_id)
-      localStorage.setItem('ai_username', form.username)
-      emit('login-success', res.data.user_id, form.username)
+      const user = await register(form.username, form.password)
+      ElMessage.success('注册成功')
+      emit('login-success', user)
     } else {
-      let res
       try {
-        // 先尝试密码登录
-        res = await login(form.username, form.password)
+        const user = await login(form.username, form.password)
+        emit('login-success', user)
       } catch (e) {
         if (e.response?.status === 401) {
           submitError.value = '用户名或密码错误'
@@ -221,19 +247,20 @@ const handleSubmit = async () => {
           formRef.value?.$el?.querySelector('input[type="password"]')?.focus()
           return
         }
-        // 兼容旧版无密码登录
-        res = await login(form.username)
+        throw e
       }
-      localStorage.setItem('ai_user_id', res.data.user_id)
-      localStorage.setItem('ai_username', form.username)
-      emit('login-success', res.data.user_id, form.username)
     }
   } catch (e) {
-    submitError.value = e.response?.data?.detail || '操作失败，请稍后重试。'
+    if (e?.status === 429) startRetryAfter(e.retryAfter)
+    submitError.value = getErrorMessage(e, '操作失败，请稍后重试。')
   } finally {
     loading.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  if (retryAfterTimer !== null) clearInterval(retryAfterTimer)
+})
 </script>
 
 <style scoped>
@@ -307,7 +334,7 @@ const handleSubmit = async () => {
 .welcome-card.precision-aurora__panel {
   display: grid;
   width: min(100%, 73rem);
-  min-height: 36rem;
+  min-height: 38rem;
   grid-template-columns: minmax(0, 0.95fr) minmax(22rem, 1.05fr);
   overflow: hidden;
   border: 1px solid var(--color-border-strong);

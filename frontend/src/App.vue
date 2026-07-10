@@ -1,12 +1,16 @@
 <template>
-  <Transition name="auth-shell" mode="out-in" appear>
-    <WelcomePage
-      v-if="!isLoggedIn"
-      key="welcome"
-      @login-success="handleLoginSuccess"
-    />
+  <RouterView v-if="route.meta.layout !== 'workspace'" v-slot="{ Component }">
+    <Transition name="auth-shell" mode="out-in" appear>
+      <component
+        :is="Component"
+        :key="route.fullPath"
+        @login-success="handleLoginSuccess"
+      />
+    </Transition>
+  </RouterView>
 
-    <div v-else key="app" class="app-shell">
+  <Transition v-else name="auth-shell" mode="out-in" appear>
+    <div :key="workspaceIdentityKey" class="app-shell">
       <a class="skip-link" href="#main-content">跳至主要内容</a>
 
       <nav
@@ -76,15 +80,17 @@
           ref="sidebarRef"
           :current-username="currentUsername"
           :user-id="currentUserId"
+          :is-admin="auth.isAdmin.value"
           :preview-mode="isPreviewMode"
           :show-close-button="isOverlayNavigation"
           @session-changed="handleSidebarSessionChanged"
           @new-session="handleSidebarNewSession"
           @clear-session="handleSidebarClearSession"
           @pdf-uploaded="handleSidebarPdfUploaded"
-          @user-logged-in="handleUserLoggedIn"
           @show-analytics="handleShowAnalytics"
           @logout="handleLogout"
+          @change-password="router.push({ name: 'change-password' })"
+          @open-admin="router.push({ name: 'admin-overview' })"
           @quick-chat="handleSidebarQuickChat"
           @go-home="handleGoHome"
           @close-navigation="closeNavigation({ restoreFocus: true })"
@@ -127,41 +133,68 @@
         </main>
       </div>
 
-      <AnalyticsPanel ref="analyticsPanelRef" :user-id="currentUserId" />
-      <ResumeReport ref="resumeReportRef" :report-text="lastAIResponse" />
-      <JobMatchPanel ref="jobMatchPanelRef" :report-text="lastAIResponse" />
+      <AnalyticsPanel v-if="analyticsMounted" ref="analyticsPanelRef" :user-id="currentUserId" />
+      <ResumeReport v-if="resumeMounted" ref="resumeReportRef" :report-text="lastAIResponse" />
+      <JobMatchPanel v-if="jobMatchMounted" ref="jobMatchPanelRef" :report-text="lastAIResponse" />
     </div>
   </Transition>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Briefcase, House, Menu } from '@element-plus/icons-vue'
-import WelcomePage from './components/WelcomePage.vue'
-import Sidebar from './components/Sidebar.vue'
-import AppTopbar from './components/AppTopbar.vue'
-import ChatWindow from './components/ChatWindow.vue'
-import AnalyticsPanel from './components/AnalyticsPanel.vue'
-import ResumeReport from './components/ResumeReport.vue'
-import JobMatchPanel from './components/JobMatchPanel.vue'
-import Dashboard from './components/Dashboard.vue'
-import { getMessages } from './api'
+import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { getErrorMessage, getMessages } from './api'
+import {
+  startAuthSynchronization,
+  stopAuthSynchronization,
+  useAuth
+} from './composables/useAuth'
+import { useDeferredPanel } from './composables/useDeferredPanel'
+import { defaultRouteForUser, safeRedirectTarget } from './router'
 
-const isPreviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1'
-const isLoggedIn = ref(isPreviewMode)
-const currentUsername = ref(isPreviewMode ? '体验用户' : '')
+const Sidebar = defineAsyncComponent(() => import('./components/Sidebar.vue'))
+const AppTopbar = defineAsyncComponent(() => import('./components/AppTopbar.vue'))
+const ChatWindow = defineAsyncComponent(() => import('./components/ChatWindow.vue'))
+const Dashboard = defineAsyncComponent(() => import('./components/Dashboard.vue'))
+const AnalyticsPanel = defineAsyncComponent(() => import('./components/AnalyticsPanel.vue'))
+const ResumeReport = defineAsyncComponent(() => import('./components/ResumeReport.vue'))
+const JobMatchPanel = defineAsyncComponent(() => import('./components/JobMatchPanel.vue'))
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuth()
+const { currentUser, logout, setAuthenticatedUser } = auth
+const isPreviewMode = computed(() => import.meta.env.DEV && route.query.preview === '1')
+const workspaceIdentityKey = computed(() => (
+  isPreviewMode.value ? 'workspace-preview' : `workspace-user-${currentUser.value?.id ?? 'anonymous'}`
+))
+const currentUsername = computed(() => isPreviewMode.value ? '体验用户' : (currentUser.value?.username || ''))
 const messages = ref([])
 const currentSessionId = ref(null)
-const currentUserId = ref(isPreviewMode ? 0 : null)
+const currentUserId = computed(() => isPreviewMode.value ? 0 : (currentUser.value?.id ?? null))
 const sidebarRef = ref(null)
-const analyticsPanelRef = ref(null)
-const resumeReportRef = ref(null)
-const jobMatchPanelRef = ref(null)
 const navigationRef = ref(null)
 const topbarRef = ref(null)
 const railNavigationButtonRef = ref(null)
 
 const showDashboard = ref(true)
+const {
+  componentRef: analyticsPanelRef,
+  mounted: analyticsMounted,
+  requestOpen: requestAnalyticsOpen
+} = useDeferredPanel()
+const {
+  componentRef: resumeReportRef,
+  mounted: resumeMounted,
+  requestOpen: requestResumeOpen
+} = useDeferredPanel()
+const {
+  componentRef: jobMatchPanelRef,
+  mounted: jobMatchMounted,
+  requestOpen: requestJobMatchOpen
+} = useDeferredPanel()
 const initialSessionReady = ref(false)
 const sessionStatus = ref('idle')
 const sessionError = ref('')
@@ -260,26 +293,83 @@ const handleDashboardAction = (intent) => {
   nextTick(() => { quickChatText.value = '' })
 }
 
-const handleLoginSuccess = (userId, username) => {
-  currentUserId.value = userId
-  currentUsername.value = username
-  isLoggedIn.value = true
+const handleLoginSuccess = async (user) => {
+  const authenticatedUser = setAuthenticatedUser(user)
+  const redirect = safeRedirectTarget(route.query.redirect)
+  if (authenticatedUser?.must_change_password) {
+    await router.replace({ name: 'change-password' })
+  } else if (redirect && redirect !== '/login') {
+    await router.replace(redirect)
+  } else {
+    await router.replace(defaultRouteForUser(authenticatedUser))
+  }
 }
 
-const handleLogout = () => {
+const resetWorkspace = () => {
+  sessionRequestId += 1
   closeNavigation()
-  localStorage.removeItem('ai_user_id')
-  localStorage.removeItem('ai_username')
-  isLoggedIn.value = false
-  currentUserId.value = null
-  currentUsername.value = ''
   messages.value = []
   currentSessionId.value = null
   sessionStatus.value = 'idle'
   sessionError.value = ''
+  lastAIResponse.value = ''
+  quickChatText.value = ''
+  lastQuickIntent.value = ''
   showDashboard.value = true
   initialSessionReady.value = false
 }
+
+const handleLogout = async () => {
+  if (!isPreviewMode.value) {
+    try {
+      await logout()
+    } catch (error) {
+      ElMessage.error(getErrorMessage(error, '退出登录失败，请检查网络后重试。'))
+      return
+    }
+  }
+  resetWorkspace()
+  await router.replace({ name: 'login' })
+}
+
+watch(() => currentUser.value?.id ?? null, (nextUserId, previousUserId) => {
+  if (nextUserId !== previousUserId) resetWorkspace()
+})
+
+watch(auth.lastRemoteAuthChange, (change) => {
+  if (!change) return
+  if (!auth.isAuthenticated.value) {
+    if (route.meta.requiresAuth && route.name !== 'login') {
+      void router.replace({ name: 'login', query: { redirect: route.fullPath } })
+    }
+    return
+  }
+  if (auth.mustChangePassword.value && route.name !== 'change-password') {
+    void router.replace({ name: 'change-password' })
+    return
+  }
+  if (route.meta.requiresAdmin && !auth.isAdmin.value) {
+    void router.replace({ name: 'workspace' })
+    return
+  }
+  if (route.name === 'login') {
+    const redirect = safeRedirectTarget(route.query.redirect)
+    void router.replace(redirect || defaultRouteForUser(currentUser.value))
+    return
+  }
+  if (
+    route.name === 'change-password'
+    && !auth.mustChangePassword.value
+    && ['login', 'register', 'change-password'].includes(change.reason)
+  ) {
+    void router.replace(defaultRouteForUser(currentUser.value))
+  }
+})
+
+watch(isPreviewMode, (previewMode) => {
+  if (previewMode) stopAuthSynchronization()
+  else startAuthSynchronization()
+}, { immediate: true })
 
 const loadSessionMessages = async (sessionId, { navigate = true } = {}) => {
   const requestId = ++sessionRequestId
@@ -352,10 +442,6 @@ const handleSendMessage = (newMessages) => {
   if (last?.role === 'assistant') lastAIResponse.value = last.content
 }
 
-const handleUserLoggedIn = (id) => {
-  currentUserId.value = id
-}
-
 const handleQuickChat = (text) => {
   showDashboard.value = false
   lastQuickIntent.value = text
@@ -390,7 +476,7 @@ const handleSidebarQuickChat = (text) => {
 
 const handleShowAnalytics = () => {
   closeNavigation()
-  analyticsPanelRef.value?.open()
+  requestAnalyticsOpen()
 }
 
 const handleGoHome = () => {
@@ -403,27 +489,19 @@ watch(lastAIResponse, (val) => {
   const intent = lastQuickIntent.value
   lastQuickIntent.value = ''
   if (intent.includes('分析简历') || val.includes('综合评分')) {
-    nextTick(() => resumeReportRef.value?.open())
+    requestResumeOpen()
   } else if (intent.includes('匹配') || val.includes('匹配度')) {
-    nextTick(() => jobMatchPanelRef.value?.open())
+    requestJobMatchOpen()
   }
 })
 
 onMounted(() => {
-  if (!isPreviewMode) {
-    const savedId = localStorage.getItem('ai_user_id')
-    const savedName = localStorage.getItem('ai_username')
-    if (savedId && savedName) {
-      currentUserId.value = parseInt(savedId)
-      currentUsername.value = savedName
-      isLoggedIn.value = true
-    }
-  }
   window.addEventListener('resize', updateViewport)
   window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
+  stopAuthSynchronization()
   if (navigationFocusFallbackTimer) clearTimeout(navigationFocusFallbackTimer)
   window.removeEventListener('resize', updateViewport)
   window.removeEventListener('keydown', handleKeydown)

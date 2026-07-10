@@ -1,8 +1,9 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm config set registry https://registry.npmmirror.com
-RUN npm install
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN npm config set registry "${NPM_REGISTRY}"
+RUN npm ci
 COPY . .
 RUN npm run build
 

@@ -213,9 +213,9 @@ const loadData = async () => {
 
   try {
     const [overviewResponse, feedbackResponse, trendResponse] = await Promise.all([
-      getAnalyticsOverview(props.userId),
-      getAnalyticsFeedback(props.userId),
-      getAnalyticsTrend(props.userId, 7)
+      getAnalyticsOverview(),
+      getAnalyticsFeedback(),
+      getAnalyticsTrend(7)
     ])
 
     overview.value = overviewResponse.data
@@ -223,7 +223,7 @@ const loadData = async () => {
     trend.value = trendResponse.data
 
     try {
-      const documentResponse = await getDocStatus(props.userId)
+      const documentResponse = await getDocStatus()
       resumeCount.value = (documentResponse.data.sources || [])
         .filter((source) => source.type === 'file')
         .length

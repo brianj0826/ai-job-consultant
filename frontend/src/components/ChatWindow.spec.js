@@ -2,7 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const apiMocks = vi.hoisted(() => ({ submitFeedback: vi.fn() }))
+const apiMocks = vi.hoisted(() => ({
+  getErrorMessage: vi.fn((error, fallback) => error?.message || fallback),
+  streamMessage: vi.fn(),
+  submitFeedback: vi.fn()
+}))
 const messageMocks = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
@@ -97,11 +101,26 @@ describe('ChatWindow', () => {
     vi.stubGlobal('fetch', vi.fn())
     Object.values(messageMocks).forEach((mock) => mock.mockClear())
     apiMocks.submitFeedback.mockReset()
+    apiMocks.streamMessage.mockReset()
+    apiMocks.streamMessage.mockImplementation((data, options) => fetch('/api/chat/stream', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      signal: options?.signal
+    }))
   })
 
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it('keeps the composer disabled until an authenticated session is selected', async () => {
+    const wrapper = mountChat({ sessionId: null })
+    expect(wrapper.get('textarea').attributes()).toHaveProperty('disabled')
+
+    await wrapper.setProps({ sessionId: 7 })
+    expect(wrapper.get('textarea').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('delays the session skeleton, renders errors, and emits retry-session', async () => {
@@ -176,6 +195,37 @@ describe('ChatWindow', () => {
     expect(emittedMessages.find((message) => message.role === 'assistant').content).toBe('完整回复')
     expect(wrapper.text()).toContain('职达 AI 的回复已完成。')
     expect(fetch).toHaveBeenCalledTimes(2)
+    const requestBodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body))
+    expect(requestBodies[0]).not.toHaveProperty('user_id')
+    expect(requestBodies[0].client_request_id).toBeTruthy()
+    expect(requestBodies[1].client_request_id).toBe(requestBodies[0].client_request_id)
+    wrapper.unmount()
+  })
+
+  it('honors Retry-After and blocks duplicate chat submissions during a 429 cooldown', async () => {
+    const wrapper = mountChat()
+    await nextTick()
+    drainFrames()
+    apiMocks.streamMessage.mockRejectedValueOnce(Object.assign(new Error('请求过于频繁'), {
+      status: 429,
+      retryAfter: 2
+    }))
+
+    await wrapper.get('textarea').setValue('请稍后重试')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('textarea').attributes()).toHaveProperty('disabled')
+    expect(wrapper.text()).toContain('2 秒后可重试')
+    await wrapper.get('form').trigger('submit')
+    expect(apiMocks.streamMessage).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(1000)
+    await nextTick()
+    expect(wrapper.text()).toContain('1 秒后可重试')
+    vi.advanceTimersByTime(1000)
+    await nextTick()
+    expect(wrapper.get('textarea').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 
