@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   deleteSource: vi.fn(),
   fetchUrlContent: vi.fn(),
   getDocStatus: vi.fn(),
+  getHealth: vi.fn(),
   getMessages: vi.fn(),
   getSessions: vi.fn(),
   renameSession: vi.fn(),
@@ -62,6 +63,7 @@ describe('Sidebar knowledge states', () => {
     Object.values(message).forEach((mock) => mock.mockReset())
     api.getSessions.mockResolvedValue({ data: [{ id: 101, name: '测试会话' }] })
     api.getMessages.mockResolvedValue({ data: [] })
+    api.getHealth.mockResolvedValue({ data: { status: 'ready' } })
   })
 
   afterEach(() => {

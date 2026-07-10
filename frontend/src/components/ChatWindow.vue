@@ -144,6 +144,7 @@
       </div>
       <p class="input-helper">
         <span v-if="streaming">AI 正在生成回复，请稍候。</span>
+        <span v-else-if="rateLimitSeconds">请求过于频繁，{{ rateLimitSeconds }} 秒后可重试。</span>
         <span v-else-if="isSessionLoading">正在载入当前会话。</span>
         <span v-else>按 Enter 发送，Shift + Enter 换行。</span>
       </p>
@@ -163,7 +164,7 @@ import {
 import { ElMessage } from 'element-plus'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
-import { submitFeedback } from '../api'
+import { getErrorMessage, streamMessage, submitFeedback } from '../api'
 import { useStreamingBuffer } from '../composables/useStreamingBuffer'
 import MessageBubble from './MessageBubble.vue'
 
@@ -191,19 +192,27 @@ const streaming = ref(false)
 const interrupted = ref(false)
 const connectionError = ref('')
 const standaloneError = ref('')
-const lastRequest = ref('')
+const lastRequest = ref(null)
 const localFeedback = ref({})
 const activeStreamKey = ref('stream-0')
 const finalAnnouncement = ref('')
 const isNearBottom = ref(true)
 const hydratingHistory = ref(true)
 const showSessionSkeleton = ref(false)
+const rateLimitSeconds = ref(0)
 
 let streamSequence = 0
 let scrollFrame = null
 let scrollForce = false
 let hydrationFrame = null
 let skeletonTimer = null
+let activeStreamController = null
+let rateLimitTimer = null
+
+const createClientRequestId = () => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
+  return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
 
 const cleanSourceMarkers = (text) => text?.replace(/【来源\d+[^】]*】/g, '') || ''
 const renderStreamingMarkdown = (text) => (
@@ -222,7 +231,14 @@ const {
 const isSessionLoading = computed(() => props.sessionStatus === 'loading')
 const hasSessionError = computed(() => props.sessionStatus === 'error')
 const conversationReady = computed(() => !isSessionLoading.value && !hasSessionError.value)
-const composerDisabled = computed(() => streaming.value || isSessionLoading.value || hasSessionError.value)
+const composerDisabled = computed(() => (
+  streaming.value
+  || rateLimitSeconds.value > 0
+  || isSessionLoading.value
+  || hasSessionError.value
+  || !props.sessionId
+  || !props.userId
+))
 const ariaBusy = computed(() => streaming.value || isSessionLoading.value)
 const activeReplyVisible = computed(() => streaming.value || interrupted.value)
 const visibleMessages = computed(() => conversationReady.value ? props.messages : [])
@@ -337,24 +353,36 @@ const send = () => {
   }
 
   input.value = ''
-  requestReply(text, true, false)
+  requestReply(text, true, false, createClientRequestId())
+}
+
+const startRateLimitCooldown = (seconds) => {
+  if (rateLimitTimer !== null) clearInterval(rateLimitTimer)
+  rateLimitSeconds.value = Math.max(1, Number.parseInt(seconds || 1, 10))
+  rateLimitTimer = setInterval(() => {
+    rateLimitSeconds.value = Math.max(0, rateLimitSeconds.value - 1)
+    if (rateLimitSeconds.value === 0) {
+      clearInterval(rateLimitTimer)
+      rateLimitTimer = null
+    }
+  }, 1000)
 }
 
 const retryLastMessage = () => {
-  if (!lastRequest.value || streaming.value) return
+  if (!lastRequest.value || composerDisabled.value) return
   if (!props.sessionId || !props.userId) {
     connectionError.value = '当前会话不可用，请重新选择会话后再尝试。'
     interrupted.value = true
     return
   }
-  requestReply(lastRequest.value, false, true)
+  requestReply(lastRequest.value.text, false, true, lastRequest.value.clientRequestId)
 }
 
-const requestReply = async (text, shouldEmitUser, reuseBubble) => {
+const requestReply = async (text, shouldEmitUser, reuseBubble, clientRequestId) => {
   connectionError.value = ''
   standaloneError.value = ''
   finalAnnouncement.value = ''
-  lastRequest.value = text
+  lastRequest.value = { text, clientRequestId }
 
   if (reuseBubble) {
     beginReplacement()
@@ -377,27 +405,14 @@ const requestReply = async (text, shouldEmitUser, reuseBubble) => {
 
   scheduleScrollToBottom({ force: true })
 
+  const controller = new AbortController()
+  activeStreamController = controller
   try {
-    const response = await fetch('/api/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text,
-        user_id: props.userId,
-        session_id: props.sessionId
-      })
-    })
-
-    if (!response.ok) {
-      let detail = ''
-      try {
-        const errorData = await response.json()
-        detail = errorData.detail || ''
-      } catch {
-        // Keep the generic response failure message below.
-      }
-      throw new Error(detail || '请求失败，请稍后重试。')
-    }
+    const response = await streamMessage({
+      message: text,
+      session_id: props.sessionId,
+      client_request_id: clientRequestId
+    }, { signal: controller.signal })
 
     if (!response.body) throw new Error('连接未返回可读取的回复内容。')
 
@@ -446,7 +461,7 @@ const requestReply = async (text, shouldEmitUser, reuseBubble) => {
 
     emit('send-message', [aiMessage])
     if (aiMessage.sources.length) emit('kb-updated')
-    lastRequest.value = ''
+    lastRequest.value = null
     interrupted.value = false
     streaming.value = false
     nextTick(() => {
@@ -454,12 +469,13 @@ const requestReply = async (text, shouldEmitUser, reuseBubble) => {
       scheduleScrollToBottom()
     })
   } catch (error) {
+    if (error?.cause?.name === 'AbortError' || error?.name === 'AbortError') return
     flushStream()
-    connectionError.value = error instanceof Error
-      ? error.message
-      : '连接失败，请稍后重试。'
+    if (error?.status === 429) startRateLimitCooldown(error.retryAfter)
+    connectionError.value = getErrorMessage(error, '连接失败，请稍后重试。')
     interrupted.value = true
   } finally {
+    if (activeStreamController === controller) activeStreamController = null
     streaming.value = false
     scheduleScrollToBottom()
   }
@@ -486,6 +502,11 @@ watch(() => props.quickText, (text) => {
 }, { immediate: true })
 
 watch(() => props.sessionId, () => {
+  activeStreamController?.abort()
+  activeStreamController = null
+  lastRequest.value = null
+  interrupted.value = false
+  resetStream()
   beginHistoryHydration()
   if (!isSessionLoading.value) nextTick(finishHistoryHydration)
 })
@@ -504,9 +525,11 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  activeStreamController?.abort()
   cancelFrame(scrollFrame)
   cancelFrame(hydrationFrame)
   if (skeletonTimer !== null) clearTimeout(skeletonTimer)
+  if (rateLimitTimer !== null) clearInterval(rateLimitTimer)
 })
 </script>
 

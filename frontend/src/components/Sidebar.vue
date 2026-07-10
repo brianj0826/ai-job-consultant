@@ -255,6 +255,16 @@
             <span class="setting-row__label">深色模式</span>
             <el-switch v-model="isDark" size="small" aria-label="切换深色模式" @change="toggleDark" />
           </label>
+          <div class="settings-actions">
+            <el-button size="small" plain @click="$emit('change-password')">
+              <el-icon :size="14" aria-hidden="true"><EditPen /></el-icon>
+              <span>修改密码</span>
+            </el-button>
+            <el-button v-if="isAdmin" size="small" type="warning" plain @click="$emit('open-admin')">
+              <el-icon :size="14" aria-hidden="true"><DataAnalysis /></el-icon>
+              <span>管理控制台</span>
+            </el-button>
+          </div>
           <p class="status-bar" aria-live="polite">
             <span :class="['status-dot', backendOnline ? 'status-on' : 'status-off']" aria-hidden="true"></span>
             <el-icon :size="14" aria-hidden="true"><Connection /></el-icon>
@@ -313,6 +323,7 @@ import {
   deleteSource,
   fetchUrlContent,
   getDocStatus,
+  getHealth,
   getMessages,
   getSessions,
   renameSession,
@@ -323,11 +334,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const props = defineProps({
   currentUsername: { type: String, default: '' },
   userId: { type: Number, default: null },
+  isAdmin: { type: Boolean, default: false },
   previewMode: { type: Boolean, default: false },
   showCloseButton: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'user-logged-in', 'show-analytics', 'logout', 'quick-chat', 'go-home', 'close-navigation'])
+const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'show-analytics', 'logout', 'change-password', 'open-admin', 'quick-chat', 'go-home', 'close-navigation'])
 
 const resumeSource = computed(() => docSources.value.find(source => source.type === 'file') || null)
 
@@ -408,7 +420,7 @@ const initUserData = async () => {
     if (sessions.value.length === 0) {
       const now = new Date()
       const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      const newRes = await createSession(props.userId, name)
+      const newRes = await createSession(name)
       currentSessionId.value = newRes.data.session_id
       emit('new-session', currentSessionId.value)
       await loadSessions()
@@ -429,7 +441,7 @@ watch(() => props.userId, (newVal) => {
 
 const loadSessions = async () => {
   if (!props.userId) return
-  const res = await getSessions(props.userId)
+  const res = await getSessions()
   sessions.value = res.data
   if (currentSessionId.value && !sessions.value.some(session => session.id === currentSessionId.value)) {
     currentSessionId.value = null
@@ -446,7 +458,7 @@ const newSession = async () => {
   try {
     const now = new Date()
     const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    const res = await createSession(props.userId, name)
+    const res = await createSession(name)
     currentSessionId.value = res.data.session_id
     emit('new-session', currentSessionId.value)
     await loadSessions()
@@ -526,7 +538,6 @@ const uploadFile = async (option) => {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('user_id', props.userId)
     const res = await uploadPDF(formData)
 
     if (res.status === 200) {
@@ -551,7 +562,7 @@ const loadDocStatus = async () => {
   knowledgeStatus.value = 'loading'
   knowledgeError.value = ''
   try {
-    const res = await getDocStatus(props.userId)
+    const res = await getDocStatus()
     if (requestId !== knowledgeRequestId) return
     docCount.value = res.data.doc_count
     docSources.value = res.data.sources || []
@@ -598,8 +609,8 @@ const backendOnline = ref(true)
 let statusTimer = null
 const checkBackendStatus = async () => {
   try {
-    const res = await fetch('/api/analytics/overview', { signal: AbortSignal.timeout(5000) })
-    backendOnline.value = res.ok
+    await getHealth()
+    backendOnline.value = true
   } catch {
     backendOnline.value = false
   }
@@ -614,7 +625,7 @@ const handleDeleteSource = async (source) => {
       '确认删除',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    await deleteSource(props.userId, source)
+    await deleteSource(source)
     ElMessage.success('已删除')
     await loadDocStatus()
   } catch (e) {
@@ -1019,6 +1030,18 @@ onUnmounted(() => {
 
 .setting-row__label {
   font-weight: 500;
+}
+
+.settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.settings-actions .el-button {
+  width: 100%;
+  margin: 0;
 }
 
 .status-bar {

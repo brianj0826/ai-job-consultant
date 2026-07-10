@@ -1,25 +1,27 @@
-import axios from 'axios'
+import { api, authenticatedFetch } from './client'
 
-const API_BASE = ''
-
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 60000
-})
-
-// ================= 用户 =================
-export const login = (username, password = '') =>
-  api.post('/api/users/login', { username, password })
+// Authentication
+export const login = (username, password) =>
+  api.post('/api/auth/login', { username, password })
 
 export const register = (username, password) =>
-  api.post('/api/users/register', { username, password })
+  api.post('/api/auth/register', { username, password })
 
-// ================= 会话 =================
-export const getSessions = (userId) =>
-  api.get('/api/sessions/', { params: { user_id: userId } })
+export const getCurrentUser = () => api.get('/api/auth/me')
 
-export const createSession = (userId, name = '新对话') =>
-  api.post('/api/sessions/', { user_id: userId, name })
+export const logout = () => api.post('/api/auth/logout')
+
+export const changePassword = (currentPassword, newPassword) =>
+  api.post('/api/auth/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword
+  })
+
+// Sessions
+export const getSessions = () => api.get('/api/sessions/')
+
+export const createSession = (name = '新对话') =>
+  api.post('/api/sessions/', { name })
 
 export const deleteSession = (sessionId) =>
   api.delete(`/api/sessions/${sessionId}`)
@@ -30,35 +32,74 @@ export const renameSession = (sessionId, name) =>
 export const getMessages = (sessionId) =>
   api.get(`/api/sessions/${sessionId}/messages`)
 
-// ================= 聊天 =================
-export const sendMessage = (data) =>
-  api.post('/api/chat/', data)
+// Chat
+export const sendMessage = (data) => api.post('/api/chat/', data)
 
-// ================= 文档（新增 user_id） =================
-export const uploadPDF = (formData) =>
-  api.post('/api/documents/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
+export const streamMessage = (data, options = {}) => authenticatedFetch('/api/chat/stream', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data),
+  signal: options.signal
+})
 
-export const getDocStatus = (userId) =>
-  api.get('/api/documents/status', { params: { user_id: userId } })
+// Documents
+export const uploadPDF = (formData) => api.post('/api/documents/upload', formData)
 
-export const deleteSource = (userId, source) =>
-  api.delete('/api/documents/source', { data: { user_id: userId, source } })
+export const getDocStatus = () => api.get('/api/documents/status')
+
+export const deleteSource = (source) =>
+  api.delete('/api/documents/source', { data: { source } })
 
 export const fetchUrlContent = (url) =>
   api.post('/api/documents/fetch-url', { url })
 
-// ================= 反馈 =================
+// Feedback
 export const submitFeedback = (msgId, feedback) =>
   api.post('/api/feedback/', { msg_id: msgId, feedback })
 
-// ================= 数据分析 =================
-export const getAnalyticsOverview = (userId) =>
-  api.get('/api/analytics/overview', { params: { user_id: userId } })
+// User analytics
+export const getAnalyticsOverview = () => api.get('/api/analytics/overview')
 
-export const getAnalyticsFeedback = (userId) =>
-  api.get('/api/analytics/feedback', { params: { user_id: userId } })
+export const getAnalyticsFeedback = () => api.get('/api/analytics/feedback')
 
-export const getAnalyticsTrend = (userId, days = 7) =>
-  api.get('/api/analytics/trend', { params: { user_id: userId, days } })
+export const getAnalyticsTrend = (days = 7) =>
+  api.get('/api/analytics/trend', { params: { days } })
+
+// Health
+export const getHealth = async () => {
+  try {
+    return await api.get('/api/health/ready', { timeout: 5000 })
+  } catch (error) {
+    if (error.status !== 404) throw error
+    return api.get('/api/health', { timeout: 5000 })
+  }
+}
+
+// Administration
+export const getAdminOverview = () => api.get('/api/admin/overview')
+
+export const getAdminUsers = ({ page = 1, pageSize = 20, search = '' } = {}) =>
+  api.get('/api/admin/users', {
+    params: { page, page_size: pageSize, search: search || undefined }
+  })
+
+export const updateAdminUserStatus = (userId, status) =>
+  api.patch(`/api/admin/users/${userId}/status`, { status })
+
+export const updateAdminUserRole = (userId, role) =>
+  api.patch(`/api/admin/users/${userId}/role`, { role })
+
+export const resetAdminUserPassword = (userId) =>
+  api.post(`/api/admin/users/${userId}/reset-password`)
+
+export const getAdminFeedback = ({ page = 1, pageSize = 20, feedback = '' } = {}) =>
+  api.get('/api/admin/feedback', {
+    params: { page, page_size: pageSize, feedback: feedback || undefined }
+  })
+
+export const getAdminAuditLogs = ({ page = 1, pageSize = 20, action = '' } = {}) =>
+  api.get('/api/admin/audit-logs', {
+    params: { page, page_size: pageSize, action: action || undefined }
+  })
+
+export { ApiError, authenticatedFetch, getCsrfToken, getErrorMessage } from './client'
