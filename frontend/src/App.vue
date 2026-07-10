@@ -1,46 +1,115 @@
 <template>
-  <!-- 欢迎页（未登录） -->
   <WelcomePage
     v-if="!isLoggedIn"
     @login-success="handleLoginSuccess"
   />
 
-  <!-- 主界面（已登录） -->
-  <div v-else class="app-container">
-    <aside class="sidebar">
+  <div v-else class="app-shell">
+    <a class="skip-link" href="#main-content">跳至主要内容</a>
+
+    <nav
+      v-if="isTabletLayout"
+      class="app-shell__rail"
+      aria-label="快捷导航"
+    >
+      <button
+        class="app-shell__rail-brand"
+        type="button"
+        aria-label="返回职业工作台"
+        title="职业工作台"
+        @click="handleGoHome"
+      >
+        <el-icon :size="22" aria-hidden="true"><Briefcase /></el-icon>
+      </button>
+
+      <div class="app-shell__rail-actions">
+        <button
+          class="app-shell__rail-button"
+          :class="{ 'app-shell__rail-button--active': showDashboard }"
+          type="button"
+          aria-label="职业工作台"
+          title="职业工作台"
+          @click="handleGoHome"
+        >
+          <el-icon :size="20" aria-hidden="true"><House /></el-icon>
+        </button>
+        <button
+          ref="railNavigationButtonRef"
+          class="app-shell__rail-button"
+          :class="{ 'app-shell__rail-button--active': navigationOpen }"
+          type="button"
+          aria-label="打开导航"
+          :aria-expanded="navigationOpen"
+          aria-controls="app-navigation"
+          title="打开导航"
+          @click="toggleNavigation"
+        >
+          <el-icon :size="20" aria-hidden="true"><Menu /></el-icon>
+        </button>
+      </div>
+    </nav>
+
+    <button
+      v-if="isOverlayNavigation && navigationOpen"
+      class="app-shell__backdrop"
+      type="button"
+      aria-label="关闭导航"
+      @click="closeNavigation()"
+    />
+
+    <aside
+      id="app-navigation"
+      ref="navigationRef"
+      class="app-shell__sidebar"
+      :class="{ 'app-shell__sidebar--open': navigationOpen }"
+      :aria-hidden="isOverlayNavigation && !navigationOpen ? 'true' : undefined"
+      :inert="isOverlayNavigation && !navigationOpen"
+      aria-label="职业工作台导航"
+      tabindex="-1"
+    >
       <Sidebar
         ref="sidebarRef"
         :current-username="currentUsername"
         :user-id="currentUserId"
-        @session-changed="handleSessionChanged"
-        @new-session="handleNewSession"
-        @clear-session="handleClearSession"
-        @pdf-uploaded="handlePdfUploaded"
+        @session-changed="handleSidebarSessionChanged"
+        @new-session="handleSidebarNewSession"
+        @clear-session="handleSidebarClearSession"
+        @pdf-uploaded="handleSidebarPdfUploaded"
         @user-logged-in="handleUserLoggedIn"
-        @show-analytics="analyticsPanelRef?.open()"
+        @show-analytics="handleShowAnalytics"
         @logout="handleLogout"
-        @quick-chat="handleQuickChat"
-        @go-home="showDashboard = true"
+        @quick-chat="handleSidebarQuickChat"
+        @go-home="handleGoHome"
       />
     </aside>
-    <main class="chat-area">
-      <!-- 工作台首页 -->
-      <Dashboard
-        v-if="showDashboard"
+
+    <div class="app-shell__workspace">
+      <AppTopbar
+        ref="topbarRef"
+        :title="pageTitle"
+        :context="pageContext"
         :username="currentUsername"
-        @action="handleDashboardAction"
+        :navigation-open="navigationOpen"
+        @toggle-navigation="toggleNavigation"
       />
-      <!-- 对话界面 -->
-      <ChatWindow
-        v-else
-        :messages="messages"
-        :session-id="currentSessionId"
-        :user-id="currentUserId"
-        :quick-text="quickChatText"
-        @send-message="handleSendMessage"
-        @kb-updated="sidebarRef?.loadDocStatus()"
-      />
-    </main>
+
+      <main id="main-content" class="app-shell__main" tabindex="-1">
+        <Dashboard
+          v-if="showDashboard"
+          :username="currentUsername"
+          @action="handleDashboardAction"
+        />
+        <ChatWindow
+          v-else
+          :messages="messages"
+          :session-id="currentSessionId"
+          :user-id="currentUserId"
+          :quick-text="quickChatText"
+          @send-message="handleSendMessage"
+          @kb-updated="sidebarRef?.loadDocStatus()"
+        />
+      </main>
+    </div>
 
     <AnalyticsPanel ref="analyticsPanelRef" :user-id="currentUserId" />
     <ResumeReport ref="resumeReportRef" :report-text="lastAIResponse" />
@@ -49,9 +118,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Briefcase, House, Menu } from '@element-plus/icons-vue'
 import WelcomePage from './components/WelcomePage.vue'
 import Sidebar from './components/Sidebar.vue'
+import AppTopbar from './components/AppTopbar.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import AnalyticsPanel from './components/AnalyticsPanel.vue'
 import ResumeReport from './components/ResumeReport.vue'
@@ -68,19 +139,74 @@ const sidebarRef = ref(null)
 const analyticsPanelRef = ref(null)
 const resumeReportRef = ref(null)
 const jobMatchPanelRef = ref(null)
+const navigationRef = ref(null)
+const topbarRef = ref(null)
+const railNavigationButtonRef = ref(null)
 
-// 工作台 / 对话切换
 const showDashboard = ref(true)
-const initialSessionReady = ref(false)  // 标记侧边栏是否已完成首次会话初始化
-
-// 跟踪最新 AI 回复，供报告面板使用
+const initialSessionReady = ref(false)
 const lastAIResponse = ref('')
+const quickChatText = ref('')
+const lastQuickIntent = ref('')
 
-// 工作台卡片点击 → 切换到对话并触发快捷操作
+const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
+const navigationOpen = ref(false)
+const lastNavigationTrigger = ref(null)
+
+const isOverlayNavigation = computed(() => viewportWidth.value < 1280)
+const isTabletLayout = computed(() => viewportWidth.value >= 768 && viewportWidth.value < 1280)
+const pageTitle = computed(() => showDashboard.value ? '职业工作台' : '职业智能对话')
+const pageContext = computed(() => showDashboard.value ? 'Career Intelligence Console' : '基于你的会话与知识库提供建议')
+
+const updateViewport = () => {
+  viewportWidth.value = window.innerWidth
+  if (!isOverlayNavigation.value) navigationOpen.value = false
+}
+
+const focusNavigation = () => {
+  nextTick(() => navigationRef.value?.focus())
+}
+
+const openNavigation = (event) => {
+  if (!isOverlayNavigation.value) return
+  lastNavigationTrigger.value = event?.currentTarget || null
+  navigationOpen.value = true
+  focusNavigation()
+}
+
+const closeNavigation = ({ restoreFocus = false } = {}) => {
+  if (!navigationOpen.value) return
+  navigationOpen.value = false
+  if (!restoreFocus) return
+  nextTick(() => {
+    if (lastNavigationTrigger.value?.isConnected) {
+      lastNavigationTrigger.value.focus()
+    } else if (isTabletLayout.value) {
+      railNavigationButtonRef.value?.focus()
+    } else {
+      topbarRef.value?.focusNavigationToggle?.()
+    }
+  })
+}
+
+const toggleNavigation = (event) => {
+  if (navigationOpen.value) {
+    closeNavigation({ restoreFocus: false })
+  } else {
+    openNavigation(event)
+  }
+}
+
+const handleKeydown = (event) => {
+  if (event.defaultPrevented || event.key !== 'Escape' || !navigationOpen.value) return
+  event.preventDefault()
+  closeNavigation({ restoreFocus: true })
+}
+
 const handleDashboardAction = (intent) => {
   showDashboard.value = false
   lastQuickIntent.value = intent
-  quickChatText.value = intent + ' '
+  quickChatText.value = `${intent} `
   nextTick(() => { quickChatText.value = '' })
 }
 
@@ -91,6 +217,7 @@ const handleLoginSuccess = (userId, username) => {
 }
 
 const handleLogout = () => {
+  closeNavigation()
   localStorage.removeItem('ai_user_id')
   localStorage.removeItem('ai_username')
   isLoggedIn.value = false
@@ -102,19 +229,8 @@ const handleLogout = () => {
   initialSessionReady.value = false
 }
 
-onMounted(() => {
-  const savedId = localStorage.getItem('ai_user_id')
-  const savedName = localStorage.getItem('ai_username')
-  if (savedId && savedName) {
-    currentUserId.value = parseInt(savedId)
-    currentUsername.value = savedName
-    isLoggedIn.value = true
-  }
-})
-
 const handleSessionChanged = async (sessionId) => {
   currentSessionId.value = sessionId
-  // 首次自动初始化时不跳转，停留在工作台
   if (!initialSessionReady.value) {
     initialSessionReady.value = true
     return
@@ -123,38 +239,87 @@ const handleSessionChanged = async (sessionId) => {
   try {
     const res = await getMessages(sessionId)
     messages.value = res.data.map(m => ({
-      role: m.role, content: m.content, id: m.id,
-      feedback: m.feedback, timestamp: m.timestamp
+      role: m.role,
+      content: m.content,
+      id: m.id,
+      feedback: m.feedback,
+      timestamp: m.timestamp
     }))
-  } catch (e) { messages.value = [] }
+  } catch (e) {
+    messages.value = []
+  }
 }
 
 const handleNewSession = (sessionId) => {
-  currentSessionId.value = sessionId; messages.value = []
-  if (!initialSessionReady.value) { initialSessionReady.value = true; return }
+  currentSessionId.value = sessionId
+  messages.value = []
+  if (!initialSessionReady.value) {
+    initialSessionReady.value = true
+    return
+  }
   showDashboard.value = false
 }
-const handleClearSession = () => { currentSessionId.value = null; messages.value = []; showDashboard.value = true }
+
+const handleClearSession = () => {
+  currentSessionId.value = null
+  messages.value = []
+  showDashboard.value = true
+}
+
 const handlePdfUploaded = () => {}
+
 const handleSendMessage = (newMessages) => {
   messages.value = [...messages.value, ...newMessages]
-  // 捕获最新 AI 回复
   const last = newMessages[newMessages.length - 1]
-  if (last && last.role === 'assistant') {
-    lastAIResponse.value = last.content
-  }
+  if (last?.role === 'assistant') lastAIResponse.value = last.content
 }
-const handleUserLoggedIn = (id) => { currentUserId.value = id }
 
-const quickChatText = ref('')
-const lastQuickIntent = ref('')  // 记录最近一次快捷操作类型
+const handleUserLoggedIn = (id) => {
+  currentUserId.value = id
+}
+
 const handleQuickChat = (text) => {
+  showDashboard.value = false
   lastQuickIntent.value = text
-  quickChatText.value = text + ' '
+  quickChatText.value = `${text} `
   nextTick(() => { quickChatText.value = '' })
 }
 
-// AI回复后自动打开对应面板
+const handleSidebarSessionChanged = (sessionId) => {
+  closeNavigation()
+  handleSessionChanged(sessionId)
+}
+
+const handleSidebarNewSession = (sessionId) => {
+  closeNavigation()
+  handleNewSession(sessionId)
+}
+
+const handleSidebarClearSession = () => {
+  closeNavigation()
+  handleClearSession()
+}
+
+const handleSidebarPdfUploaded = () => {
+  closeNavigation()
+  handlePdfUploaded()
+}
+
+const handleSidebarQuickChat = (text) => {
+  closeNavigation()
+  handleQuickChat(text)
+}
+
+const handleShowAnalytics = () => {
+  closeNavigation()
+  analyticsPanelRef.value?.open()
+}
+
+const handleGoHome = () => {
+  closeNavigation()
+  showDashboard.value = true
+}
+
 watch(lastAIResponse, (val) => {
   if (!val || !lastQuickIntent.value) return
   const intent = lastQuickIntent.value
@@ -166,108 +331,213 @@ watch(lastAIResponse, (val) => {
   }
 })
 
+onMounted(() => {
+  const savedId = localStorage.getItem('ai_user_id')
+  const savedName = localStorage.getItem('ai_username')
+  if (savedId && savedName) {
+    currentUserId.value = parseInt(savedId)
+    currentUsername.value = savedName
+    isLoggedIn.value = true
+  }
+  window.addEventListener('resize', updateViewport)
+  window.addEventListener('keydown', handleKeydown)
+})
 
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewport)
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>
-.app-container {
-  display: flex;
-  height: 100vh;
-  background: #f5f6fa;
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100dvh;
+  overflow: clip;
+  background: var(--color-canvas);
 }
-.sidebar {
-  width: 330px;
-  background: #fff;
-  border-right: 1.5px solid #eef0f6;
-  padding: 16px 18px;
+
+.app-shell__sidebar {
+  grid-column: 1;
+  z-index: var(--z-navigation);
+  min-width: 0;
+  height: 100dvh;
+  padding: var(--space-4);
   overflow-y: auto;
-  box-shadow: 2px 0 16px rgba(0,0,0,0.03);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
-.sidebar::-webkit-scrollbar { width: 5px; }
-.sidebar::-webkit-scrollbar-thumb { background: #d0d5e0; border-radius: 3px; }
-.sidebar::-webkit-scrollbar-track { background: transparent; }
-.chat-area {
-  flex: 1;
+
+.app-shell__workspace {
+  grid-column: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+.app-shell__main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-canvas);
 }
-</style>
 
-<!-- 暗色模式全局样式 -->
-<style>
-html.dark body {
-  background: #1a1a2e;
+.app-shell__rail,
+.app-shell__backdrop {
+  display: none;
 }
-html.dark .app-container {
-  background: #1a1a2e;
+
+@media (min-width: 1280px) {
+  .app-shell__sidebar {
+    position: sticky;
+    top: 0;
+  }
 }
-html.dark .sidebar {
-  background: #16213e;
-  border-color: #2a2a4a;
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .app-shell {
+    grid-template-columns: var(--sidebar-width-compact) minmax(0, 1fr);
+  }
+
+  .app-shell__rail {
+    position: sticky;
+    top: 0;
+    z-index: calc(var(--z-navigation) + 1);
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-5);
+    height: 100dvh;
+    padding: var(--space-4) var(--space-2);
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+
+  .app-shell__rail-brand,
+  .app-shell__rail-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition:
+      color var(--duration-control) var(--ease-standard),
+      border-color var(--duration-control) var(--ease-standard),
+      background-color var(--duration-control) var(--ease-standard);
+  }
+
+  .app-shell__rail-brand {
+    color: var(--color-primary);
+  }
+
+  .app-shell__rail-actions {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .app-shell__rail-button:hover,
+  .app-shell__rail-button--active,
+  .app-shell__rail-brand:hover {
+    border-color: var(--color-border);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+  }
+
+  .app-shell__rail-brand:focus-visible,
+  .app-shell__rail-button:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .app-shell__sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: var(--sidebar-width-compact);
+    z-index: var(--z-navigation);
+    width: min(var(--sidebar-width), calc(100dvw - var(--sidebar-width-compact)));
+    height: 100dvh;
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-dialog);
+    transform: translateX(-100%);
+    transition: transform var(--duration-panel) var(--ease-standard);
+  }
+
+  .app-shell__sidebar--open {
+    transform: translateX(0);
+  }
+
+  .app-shell__workspace {
+    grid-column: 2;
+  }
+
+  .app-shell__backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: var(--sidebar-width-compact);
+    z-index: var(--z-backdrop);
+    display: block;
+    padding: 0;
+    border: 0;
+    background: var(--color-backdrop);
+    cursor: pointer;
+  }
 }
-html.dark .sidebar h2,
-html.dark .sidebar .user-name,
-html.dark .sidebar .source-list-label {
-  color: #e0e0e0;
+
+@media (max-width: 767px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-shell__workspace {
+    min-height: 100dvh;
+  }
+
+  .app-shell__sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--z-navigation);
+    width: 100vw;
+    height: 100dvh;
+    padding:
+      max(var(--space-4), env(safe-area-inset-top))
+      max(var(--space-4), env(safe-area-inset-right))
+      max(var(--space-4), env(safe-area-inset-bottom))
+      max(var(--space-4), env(safe-area-inset-left));
+    border: 0;
+    box-shadow: var(--shadow-dialog);
+    transform: translateX(-100%);
+    transition: transform var(--duration-panel) var(--ease-standard);
+  }
+
+  .app-shell__sidebar--open {
+    transform: translateX(0);
+  }
+
+  .app-shell__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-backdrop);
+    display: block;
+    padding: 0;
+    border: 0;
+    background: var(--color-backdrop);
+    cursor: pointer;
+  }
 }
-html.dark .chat-container {
-  background: #1a1a2e;
-}
-html.dark .message-list {
-  background: #1a1a2e;
-}
-html.dark .bubble--bot {
-  background: #2a2a4a;
-  color: #e0e0e0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-html.dark .input-area {
-  background: #16213e;
-  border-color: #2a2a4a;
-}
-html.dark .source-item {
-  color: #aaa;
-  border-color: #2a2a4a;
-}
-html.dark .setting-row {
-  color: #e0e0e0;
-}
-html.dark .status-bar {
-  color: #aaa;
-}
-html.dark .msg-time {
-  color: #777;
-}
-html.dark .source-label,
-html.dark .typing-indicator {
-  color: #888;
-}
-html.dark .welcome-container {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-}
-html.dark .welcome-card {
-  background: #16213e;
-}
-html.dark .form-side h2 {
-  color: #e0e0e0;
-}
-html.dark .form-sub {
-  color: #999;
-}
-html.dark .demo-hint {
-  color: #666;
-}
-html.dark .toggle-text {
-  color: #999;
-}
-html.dark .greeting { color: #e0e0e0; }
-html.dark .feature-card { background: #16213e; border-color: #2a2a4a; }
-html.dark .feature-card h3 { color: #e0e0e0; }
-html.dark .tips-section { background: #16213e; border-color: #2a2a4a; }
-html.dark .tips-title { color: #e0e0e0; }
-html.dark .tip-item { background: #1a1a2e; }
-html.dark .tip-item strong { color: #ccc; }
-html.dark .home-btn { background: #1a1a2e; border-color: #2a2a4a; color: #8899ff; }
-html.dark .home-btn:hover { border-color: #5b7fff; background: #1e1e3a; }
 </style>
