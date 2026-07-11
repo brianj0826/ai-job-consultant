@@ -1,179 +1,590 @@
 <template>
-  <div class="dashboard">
-    <!-- 欢迎区 -->
-    <div class="welcome-header">
-      <h1 class="greeting">👋 欢迎回来，{{ username }}</h1>
-      <p class="subtitle">今天想提升哪方面的求职竞争力？</p>
+  <section class="dashboard" aria-labelledby="dashboard-title">
+    <header class="dashboard-header">
+      <p class="dashboard-kicker">CAREER COMMAND</p>
+      <h1 id="dashboard-title" class="dashboard-title">欢迎回来，{{ username }}</h1>
+      <p class="dashboard-subtitle">选择一个明确的下一步，让准备工作保持在可推进的节奏中。</p>
+    </header>
+
+    <div class="command-layout">
+      <article class="command-spotlight" aria-labelledby="spotlight-title">
+        <div class="spotlight-content">
+          <p class="spotlight-kicker">
+            <el-icon aria-hidden="true"><Lightning /></el-icon>
+            NEXT BEST STEP
+          </p>
+          <h2 id="spotlight-title">从你的简历开始，建立更清晰的求职策略。</h2>
+          <p>
+            先梳理已有经历的表达、重点与可改进处，再把下一次投递和面试准备落到具体行动上。
+          </p>
+          <div class="spotlight-footer">
+            <el-button class="spotlight-action" type="primary" @click="triggerAction('分析简历')">
+              <el-icon aria-hidden="true"><DocumentChecked /></el-icon>
+              分析简历
+              <el-icon aria-hidden="true"><ArrowRight /></el-icon>
+            </el-button>
+            <span>上传简历后即可开始分析。</span>
+          </div>
+        </div>
+        <div class="spotlight-orbit" aria-hidden="true">
+          <span class="orbit-ring orbit-ring--outer"></span>
+          <span class="orbit-ring orbit-ring--inner"></span>
+          <span class="orbit-core"><el-icon><DocumentChecked /></el-icon></span>
+        </div>
+      </article>
+
+      <section class="quick-launch" aria-labelledby="quick-launch-title">
+        <div class="quick-launch-heading">
+          <p id="quick-launch-title" class="section-kicker">CONTINUE WITH</p>
+          <p>选择你的下一项训练</p>
+        </div>
+
+        <button class="task-card" type="button" @click="triggerAction('匹配')">
+          <span class="task-icon" aria-hidden="true"><el-icon><Aim /></el-icon></span>
+          <span class="task-copy">
+            <strong>岗位精准匹配</strong>
+            <small>对照目标 JD，梳理匹配项与待补齐方向。</small>
+          </span>
+          <el-icon class="task-arrow" aria-hidden="true"><ArrowRight /></el-icon>
+        </button>
+
+        <button class="task-card" type="button" @click="triggerAction('模拟面试')">
+          <span class="task-icon" aria-hidden="true"><el-icon><Microphone /></el-icon></span>
+          <span class="task-copy">
+            <strong>模拟面试训练</strong>
+            <small>围绕目标岗位组织回答，获得可执行的反馈。</small>
+          </span>
+          <el-icon class="task-arrow" aria-hidden="true"><ArrowRight /></el-icon>
+        </button>
+      </section>
     </div>
 
-    <!-- 三个核心功能卡片 -->
-    <div class="card-grid">
-      <div class="feature-card card-resume" @click="$emit('action', '分析简历')">
-        <div class="card-icon">📋</div>
-        <h3>简历智能分析</h3>
-        <p>上传简历，AI 从技术栈、项目经验、成果量化等维度深度分析，给出评分与改进建议</p>
-        <span class="card-action">开始分析 →</span>
-      </div>
+    <section class="career-playbook" aria-labelledby="playbook-title">
+      <header class="playbook-heading">
+        <div>
+          <p class="section-kicker">PREPARATION PLAYBOOK</p>
+          <h2 id="playbook-title">把准备工作拆成可复盘的动作</h2>
+        </div>
+        <p>每一项建议都可以直接用在下一份简历、JD 或面试演练中。</p>
+      </header>
 
-      <div class="feature-card card-match" @click="$emit('action', '匹配')">
-        <div class="card-icon">🎯</div>
-        <h3>岗位精准匹配</h3>
-        <p>输入目标岗位 JD，AI 对比你的简历与岗位要求，量化匹配度并指出技能差距</p>
-        <span class="card-action">开始匹配 →</span>
-      </div>
-
-      <div class="feature-card card-interview" @click="$emit('action', '模拟面试')">
-        <div class="card-icon">🎤</div>
-        <h3>模拟面试训练</h3>
-        <p>AI 扮演面试官，针对目标岗位出题，评估你的回答质量并给出专业反馈</p>
-        <span class="card-action">开始练习 →</span>
-      </div>
-    </div>
-
-    <!-- 求职小贴士 -->
-    <div class="tips-section">
-      <h3 class="tips-title">💡 求职小贴士</h3>
-      <div class="tips-grid">
-        <div class="tip-item">
-          <span class="tip-num">01</span>
+      <ol class="guidance-list">
+        <li>
+          <span class="guidance-index tabular-nums">01</span>
           <div>
-            <strong>STAR 法则让你的简历脱颖而出</strong>
-            <p>Situation（情境）→ Task（任务）→ Action（行动）→ Result（结果）。不要只写"负责开发XX系统"，改成"主导开发XX系统，优化核心查询逻辑，将接口响应时间从800ms降至120ms，日均服务用户10万+"。用具体数字量化成果，让HR一眼看到你的价值。简历不是记流水账，而是展示你解决过的真实难题。</p>
+            <h3>用 STAR 结构呈现经历</h3>
+            <p>说明情境、任务、行动与结果，让每一段经历都有清晰的贡献和证据。</p>
           </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-num">02</span>
+        </li>
+        <li>
+          <span class="guidance-index tabular-nums">02</span>
           <div>
-            <strong>投递前先做"岗位拆解"</strong>
-            <p>拿到一份JD不要立刻投递，先逐条拆解：哪些是硬性要求（学历/年限/技能），哪些是加分项（行业经验/开源贡献），哪些是软性要求（沟通/团队协作）。对照自己的简历，标注出每条要求的匹配程度。对于明显不达标的硬性要求，优先补齐再投递，避免盲目海投浪费机会。</p>
+            <h3>投递前先拆解岗位要求</h3>
+            <p>区分硬性条件、加分项与协作要求，再针对性调整简历与沟通重点。</p>
           </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-num">03</span>
+        </li>
+        <li>
+          <span class="guidance-index tabular-nums">03</span>
           <div>
-            <strong>面试本质是"讲故事"</strong>
-            <p>每段项目经历准备一个3分钟的精简版本：背景是什么？你承担什么角色？遇到了什么困难？你做了哪些关键决策？最终实现了什么效果？用"问题→方案→结果"的结构串联。面试官不是考你背诵，而是看你解决问题的思路。提前准备好2-3个有深度的反问，展现你对公司和岗位的真正兴趣。</p>
+            <h3>把面试回答组织成故事</h3>
+            <p>围绕问题、方案和结果练习表达，提前准备能够展开追问的项目案例。</p>
           </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-num">04</span>
-          <div>
-            <strong>持续迭代比一次完美更重要</strong>
-            <p>很多求职者花几周打磨一份"完美简历"才敢投递，但最好的策略是小步快跑：先投3-5家意向较低的公司试试反应，根据反馈快速调整简历和面试策略。每轮面试后总结经验，优化不足。数据显示，求职者平均面试7-8次后才能进入最佳状态，越早开始真实演练，越早找到节奏。</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+        </li>
+      </ol>
+    </section>
+  </section>
 </template>
 
 <script setup>
+import {
+  Aim,
+  ArrowRight,
+  DocumentChecked,
+  Lightning,
+  Microphone
+} from '@element-plus/icons-vue'
+
 defineProps({
   username: { type: String, default: '同学' }
 })
-defineEmits(['action'])
+
+const emit = defineEmits(['action'])
+
+const triggerAction = (action) => emit('action', action)
 </script>
 
 <style scoped>
 .dashboard {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 36px 32px;
-  height: 100%;
+  min-height: 100%;
   overflow-y: auto;
+  padding: clamp(var(--space-6), 5vw, var(--space-12));
+  background: var(--color-canvas);
 }
-.dashboard::-webkit-scrollbar { width: 5px; }
-.dashboard::-webkit-scrollbar-thumb { background: #d0d5e0; border-radius: 3px; }
 
-/* 欢迎区 */
-.welcome-header {
-  margin-bottom: 32px;
+.dashboard-header {
+  max-width: var(--content-max-width);
+  margin: 0 auto var(--space-10);
 }
-.greeting {
-  font-size: 26px;
+
+.dashboard-kicker,
+.section-kicker,
+.spotlight-kicker {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0 0 var(--space-3);
+  color: var(--color-primary);
+  font-size: var(--font-size-caption);
   font-weight: 700;
-  color: #2c3e50;
-  margin: 0 0 6px;
-}
-.subtitle {
-  font-size: 15px;
-  color: #909399;
-  margin: 0;
+  letter-spacing: 0.13em;
+  line-height: var(--line-height-caption);
 }
 
-/* 功能卡片 */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-bottom: 36px;
-}
-.feature-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 24px 20px;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  border: 1.5px solid #eef0f6;
-  position: relative;
-  overflow: hidden;
-}
-.feature-card::before {
+.dashboard-kicker::before {
+  width: 1.5rem;
+  height: 1px;
+  background: currentColor;
   content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 3px;
-  border-radius: 14px 14px 0 0;
-}
-.card-resume::before { background: linear-gradient(90deg, #667eea, #764ba2); }
-.card-match::before { background: linear-gradient(90deg, #f093fb, #f5576c); }
-.card-interview::before { background: linear-gradient(90deg, #4facfe, #00f2fe); }
-
-.feature-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.08);
-}
-.card-icon { font-size: 32px; margin-bottom: 10px; }
-.feature-card h3 {
-  font-size: 16px; font-weight: 600; color: #2c3e50; margin: 0 0 8px;
-}
-.feature-card p {
-  font-size: 13px; color: #909399; line-height: 1.6; margin: 0 0 14px;
-}
-.card-action {
-  font-size: 13px; font-weight: 600; color: #5b7fff;
 }
 
-/* 小贴士 */
-.tips-section {
-  background: #fff;
-  border-radius: 14px;
-  padding: 22px 24px;
-  border: 1.5px solid #eef0f6;
+.dashboard-title {
+  margin-bottom: var(--space-3);
+  color: var(--color-text-primary);
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
 }
-.tips-title {
-  font-size: 16px; font-weight: 600; color: #2c3e50;
-  margin: 0 0 16px;
+
+.dashboard-subtitle {
+  max-width: 40rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-large);
+  line-height: var(--line-height-body-large);
 }
-.tips-grid {
+
+.command-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  max-width: var(--content-max-width);
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.9fr);
+  gap: var(--space-6);
+  margin: 0 auto var(--space-10);
 }
-.tip-item {
-  display: flex; gap: 12px; align-items: flex-start;
-  padding: 12px 14px;
-  background: #f8f9fd;
-  border-radius: 10px;
+
+.command-spotlight {
+  position: relative;
+  display: flex;
+  min-height: 22rem;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: clamp(var(--space-6), 4vw, var(--space-10));
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card, var(--radius-panel));
+  background:
+    radial-gradient(
+      circle at 88% 15%,
+      color-mix(in srgb, var(--color-cyan, var(--color-electric-blue, var(--color-primary))) 22%, transparent),
+      transparent 25rem
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-primary) 15%, var(--color-surface-elevated, var(--color-surface))),
+      var(--color-surface-elevated, var(--color-surface)) 62%
+    );
+  box-shadow: var(--shadow-popover);
 }
-.tip-num {
-  font-size: 22px; font-weight: 800; color: #d0d5e0;
-  flex-shrink: 0; line-height: 1;
+
+.command-spotlight::before {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+  border-radius: inherit;
+  content: '';
+  opacity: 0.75;
+  pointer-events: none;
 }
-.tip-item strong {
-  font-size: 13px; color: #444; display: block; margin-bottom: 4px;
+
+.spotlight-content {
+  position: relative;
+  z-index: 1;
+  max-width: 31rem;
 }
-.tip-item p {
-  font-size: 12px; color: #909399; margin: 0; line-height: 1.6;
+
+.spotlight-kicker {
+  color: var(--color-cyan, var(--color-primary));
+}
+
+.spotlight-kicker .el-icon {
+  font-size: 1rem;
+}
+
+.command-spotlight h2 {
+  margin-bottom: var(--space-4);
+  color: var(--color-text-primary);
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.command-spotlight > .spotlight-content > p:not(.spotlight-kicker) {
+  max-width: 38ch;
+  margin-bottom: var(--space-8);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-large);
+  line-height: 1.7;
+}
+
+.spotlight-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+}
+
+.spotlight-action {
+  --el-button-border-color: transparent;
+  --el-button-bg-color: var(--color-primary);
+  --el-button-hover-bg-color: var(--color-primary-hover);
+  --el-button-active-bg-color: var(--color-primary-pressed);
+
+  min-height: 2.75rem;
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-electric-blue, var(--color-primary)) 60%,
+    var(--color-cyan, var(--color-primary-hover))
+  );
+  box-shadow: 0 0.8rem 2.25rem color-mix(in srgb, var(--color-primary) 25%, transparent);
+  font-weight: 650;
+}
+
+.spotlight-action .el-icon:last-child {
+  margin-left: var(--space-1);
+}
+
+.spotlight-footer > span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.spotlight-orbit {
+  position: absolute;
+  top: 50%;
+  right: clamp(-6rem, -3vw, -2rem);
+  width: clamp(13rem, 25vw, 19rem);
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+}
+
+.orbit-ring,
+.orbit-core {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.orbit-ring {
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, transparent);
+}
+
+.orbit-ring--outer::after,
+.orbit-ring--inner::after {
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-cyan, var(--color-primary));
+  box-shadow: 0 0 1.25rem var(--color-cyan, var(--color-primary));
+  content: '';
+}
+
+.orbit-ring--outer::after {
+  top: 14%;
+  left: 15%;
+}
+
+.orbit-ring--inner {
+  inset: 18%;
+  border-color: color-mix(in srgb, var(--color-electric-blue, var(--color-primary)) 48%, transparent);
+}
+
+.orbit-ring--inner::after {
+  right: 9%;
+  bottom: 17%;
+}
+
+.orbit-core {
+  inset: 37%;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  box-shadow: 0 0 3rem color-mix(in srgb, var(--color-primary) 48%, transparent);
+  font-size: 1.35rem;
+}
+
+.quick-launch {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card, var(--radius-panel));
+  background: var(--color-surface);
+}
+
+.quick-launch-heading {
+  margin-bottom: var(--space-1);
+}
+
+.quick-launch-heading .section-kicker {
+  margin-bottom: var(--space-1);
+}
+
+.quick-launch-heading > p:last-child {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.task-card {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--duration-control) var(--ease-standard),
+    border-color var(--duration-control) var(--ease-standard),
+    transform var(--duration-control) var(--ease-standard);
+}
+
+.task-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.task-icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 1.15rem;
+}
+
+.task-copy {
+  min-width: 0;
+}
+
+.task-copy strong,
+.task-copy small {
+  display: block;
+}
+
+.task-copy strong {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: 650;
+  line-height: var(--line-height-label);
+}
+
+.task-copy small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.task-arrow {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  transition:
+    color var(--duration-control) var(--ease-standard),
+    transform var(--duration-control) var(--ease-standard);
+}
+
+.career-playbook {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border);
+}
+
+.playbook-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.65fr);
+  gap: var(--space-8);
+  align-items: end;
+  margin-bottom: var(--space-6);
+}
+
+.playbook-heading .section-kicker {
+  margin-bottom: var(--space-2);
+}
+
+.playbook-heading h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-section-title);
+  font-weight: 650;
+  line-height: var(--line-height-section-title);
+}
+
+.playbook-heading > p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.guidance-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.guidance-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.guidance-index {
+  color: var(--color-primary);
+  font-size: var(--font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: var(--line-height-caption);
+}
+
+.guidance-list h3 {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: 650;
+  line-height: var(--line-height-label);
+}
+
+.guidance-list p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+@media (max-width: 980px) {
+  .command-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-launch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-launch-heading {
+    grid-column: 1 / -1;
+  }
+
+  .playbook-heading {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+}
+
+@media (max-width: 680px) {
+  .dashboard {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .dashboard-header {
+    margin-bottom: var(--space-8);
+  }
+
+  .command-layout {
+    gap: var(--space-4);
+    margin-bottom: var(--space-8);
+  }
+
+  .command-spotlight {
+    min-height: 0;
+  }
+
+  .spotlight-orbit {
+    top: 3rem;
+    right: -4rem;
+    width: 11rem;
+    transform: none;
+  }
+
+  .spotlight-content {
+    max-width: calc(100% - 3rem);
+  }
+
+  .spotlight-footer {
+    align-items: stretch;
+  }
+
+  .spotlight-action {
+    width: 100%;
+  }
+
+  .quick-launch,
+  .guidance-list {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-launch {
+    padding: var(--space-4);
+  }
+
+  .career-playbook {
+    padding-top: var(--space-6);
+  }
+
+  .guidance-list {
+    gap: var(--space-4);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .task-card:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-hover);
+    transform: translateY(-2px);
+  }
+
+  .task-card:hover .task-arrow {
+    color: var(--color-primary);
+    transform: translateX(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-card:hover,
+  .task-card:hover .task-arrow {
+    transform: none;
+  }
 }
 </style>

@@ -1,149 +1,399 @@
 <template>
-  <div>
-    <h2>💼 职达求职顾问</h2>
-
-    <!-- 用户信息 -->
-    <div class="user-info-bar">
-      <span class="user-avatar">👤</span>
-      <span class="user-name">{{ currentUsername || '未登录' }}</span>
-      <el-button
-        @click="$emit('logout')"
-        type="danger"
-        size="small"
-        plain
-        class="logout-btn"
+  <div class="sidebar-panel">
+    <header class="sidebar-brand">
+      <div class="sidebar-brand__mark" aria-hidden="true">
+        <el-icon :size="20"><Briefcase /></el-icon>
+      </div>
+      <div class="sidebar-brand__copy">
+        <span class="sidebar-brand__name">职达</span>
+        <span class="sidebar-brand__meta">Career Intelligence</span>
+      </div>
+      <button
+        v-if="showCloseButton"
+        class="sidebar-close"
+        type="button"
+        aria-label="关闭导航"
+        title="关闭导航"
+        @click="$emit('close-navigation')"
       >
-        退出
-      </el-button>
-    </div>
+        <el-icon :size="20" aria-hidden="true"><Close /></el-icon>
+      </button>
+    </header>
 
-    <el-button @click="$emit('go-home')" size="small" class="home-btn">🏠 首页工作台</el-button>
+    <nav class="sidebar-navigation" aria-label="工作台功能">
+      <button class="sidebar-home" type="button" @click="$emit('go-home')">
+        <el-icon :size="18" aria-hidden="true"><House /></el-icon>
+        <span>职业工作台</span>
+      </button>
 
-    <el-collapse v-model="activePanels" class="sidebar-collapse">
-      <!-- 会话管理 -->
-      <el-collapse-item title="💬 会话管理" name="chat">
-        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-          <el-select v-model="currentSessionId" placeholder="选择会话" @change="switchSession" style="flex: 1;" size="small">
-            <el-option v-for="s in sessions" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
-          <el-button @click="handleRenameSession" size="small" :disabled="!currentSessionId" title="重命名">✏️</el-button>
-        </div>
-        <div class="btn-stack">
-          <el-button type="primary" @click="newSession" size="small" style="width:100%">➕ 新建对话</el-button>
-          <el-button @click="clearSession" type="danger" plain size="small" style="width:100%">🗑️ 清空</el-button>
-          <div style="display:flex;gap:6px">
-            <el-button @click="exportSession" size="small" style="flex:1">📥 导出</el-button>
-            <el-button @click="$emit('show-analytics')" type="warning" size="small" style="flex:1">📊 数据</el-button>
+      <el-collapse v-model="activePanels" class="sidebar-collapse">
+        <el-collapse-item name="chat">
+          <template #title>
+            <span class="collapse-title">
+              <el-icon :size="17" aria-hidden="true"><ChatDotRound /></el-icon>
+              <span>会话</span>
+            </span>
+          </template>
+
+          <div class="session-picker">
+            <el-select
+              v-model="currentSessionId"
+              class="session-picker__select"
+              :disabled="sessionActionPending"
+              placeholder="选择会话"
+              size="small"
+              @change="switchSession"
+            >
+              <el-option v-for="session in sessions" :key="session.id" :label="session.name" :value="session.id" />
+            </el-select>
+            <el-button
+              class="icon-button"
+              size="small"
+              :disabled="!currentSessionId || sessionActionPending"
+              :loading="renamingSession"
+              aria-label="重命名当前会话"
+              title="重命名当前会话"
+              @click="handleRenameSession"
+            >
+              <el-icon :size="15" aria-hidden="true"><EditPen /></el-icon>
+            </el-button>
           </div>
-        </div>
-      </el-collapse-item>
 
-      <!-- 知识库 -->
-      <el-collapse-item title="📚 知识库" name="kb">
-        <el-tag v-if="docCount > 0" type="success" size="small">✅ {{ docCount }} 个文档块</el-tag>
-        <el-tag v-else type="warning" size="small">⚠️ 为空，请上传文档</el-tag>
-        <div v-if="docSources.length" style="margin-top:6px">
-          <div v-for="(s, i) in docSources" :key="i" class="source-item">
-            <span :title="s.source" class="source-name">{{ s.source.length > 25 ? s.source.slice(0,25)+'...' : s.source }}</span>
-            <div style="display:flex;align-items:center;gap:4px">
-              <el-tag :type="s.type==='web'?'warning':'info'" size="small">{{ s.type==='web'?'🌐':'📄' }}</el-tag>
-              <el-button @click="handleDeleteSource(s.source)" type="danger" size="small" circle :loading="deletingSource===s.source"><el-icon><Delete /></el-icon></el-button>
+          <div class="button-stack">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="creatingSession"
+              :disabled="sessionActionPending && !creatingSession"
+              @click="newSession"
+            >
+              <el-icon :size="15" aria-hidden="true"><Plus /></el-icon>
+              <span>新建对话</span>
+            </el-button>
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :loading="clearingSession"
+              :disabled="!currentSessionId || (sessionActionPending && !clearingSession)"
+              @click="clearSession"
+            >
+              <el-icon :size="15" aria-hidden="true"><Delete /></el-icon>
+              <span>清空会话</span>
+            </el-button>
+            <div class="button-grid">
+              <el-button
+                size="small"
+                :loading="exportingSession"
+                :disabled="sessionActionPending && !exportingSession"
+                @click="exportSession"
+              >
+                <el-icon :size="15" aria-hidden="true"><Download /></el-icon>
+                <span>导出</span>
+              </el-button>
+              <el-button size="small" @click="$emit('show-analytics')">
+                <el-icon :size="15" aria-hidden="true"><DataAnalysis /></el-icon>
+                <span>数据</span>
+              </el-button>
             </div>
           </div>
-        </div>
-        <el-upload :http-request="uploadFile" :show-file-list="false" accept=".pdf,.txt,.md,.docx" style="margin-top:8px">
-          <el-button type="primary" plain size="small" style="width:100%">📤 上传文档</el-button>
-        </el-upload>
-      </el-collapse-item>
+        </el-collapse-item>
 
-      <!-- 求职工具箱 -->
-      <el-collapse-item title="🔧 求职工具箱" name="career" v-if="docSources.length">
-        <div class="resume-file" v-if="resumeSource">📋 {{ resumeSource.title || resumeSource.source }}</div>
-        <div class="tool-btns">
-          <el-button @click="$emit('quick-chat','帮我分析一下我的简历')" type="primary" size="small" :disabled="!resumeSource" style="flex:1">🔍 分析</el-button>
-          <el-button @click="$emit('quick-chat','请帮我模拟面试，先问我的目标岗位，然后逐题提问并点评')" type="success" size="small" style="flex:1">🎤 面试</el-button>
-        </div>
-        <div class="jd-input-area">
-          <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
-            <span style="font-size:12px;color:#909399">📋 岗位JD</span>
-            <el-button @click="handleFetchJD" size="small" :loading="fetchingJD" style="margin-left:auto;font-size:11px">🔗 链接导入</el-button>
-          </div>
-          <el-input v-model="jdText" type="textarea" :rows="5" placeholder="粘贴岗位JD..." size="small" />
-          <div class="jd-btns">
-            <el-button @click="handleMatchJob" type="success" size="small" :disabled="!jdText||!resumeSource" style="flex:1">🎯 匹配</el-button>
-            <el-button @click="handleGenQuestions" type="warning" size="small" :disabled="!jdText" style="flex:1">💬 出题</el-button>
-          </div>
-        </div>
-      </el-collapse-item>
+        <el-collapse-item name="kb">
+          <template #title>
+            <span class="collapse-title">
+              <el-icon :size="17" aria-hidden="true"><FolderOpened /></el-icon>
+              <span>知识库</span>
+            </span>
+          </template>
 
-      <!-- 设置 -->
-      <el-collapse-item title="⚙️ 设置" name="settings">
-        <div class="setting-row">
-          <span>🌓 暗色模式</span>
-          <el-switch v-model="isDark" @change="toggleDark" size="small" />
-        </div>
-        <div class="status-bar">
-          <span :class="['status-dot', backendOnline?'status-on':'status-off']"></span>
-          <span class="status-text">{{ backendOnline?'服务正常':'服务离线' }}</span>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
+          <el-tag
+            v-if="knowledgeStatus === 'loading' && !hasKnowledgeSnapshot"
+            type="info"
+            effect="plain"
+            size="small"
+            class="knowledge-status"
+          >
+            <el-icon class="knowledge-status__spinner" :size="13" aria-hidden="true"><Loading /></el-icon>
+            <span>正在加载知识库</span>
+          </el-tag>
+          <el-tag
+            v-else-if="knowledgeStatus === 'error' && !hasKnowledgeSnapshot"
+            type="danger"
+            effect="plain"
+            size="small"
+            class="knowledge-status"
+          >
+            <el-icon :size="13" aria-hidden="true"><WarningFilled /></el-icon>
+            <span>知识库加载失败</span>
+          </el-tag>
+          <el-tag v-else-if="docCount > 0" type="success" effect="plain" size="small" class="knowledge-status">
+            <el-icon :size="13" aria-hidden="true"><CircleCheck /></el-icon>
+            <span>{{ docCount }} 个文档块</span>
+          </el-tag>
+          <el-tag v-else-if="hasKnowledgeSnapshot" type="warning" effect="plain" size="small" class="knowledge-status">
+            <el-icon :size="13" aria-hidden="true"><WarningFilled /></el-icon>
+            <span>知识库为空</span>
+          </el-tag>
+
+          <p
+            v-if="knowledgeStatus === 'loading' && hasKnowledgeSnapshot"
+            class="knowledge-refreshing"
+            role="status"
+          >
+            正在刷新知识库…
+          </p>
+
+          <p
+            v-if="knowledgeStatus === 'error' && hasKnowledgeSnapshot"
+            class="knowledge-warning"
+            role="status"
+          >
+            <el-icon :size="14" aria-hidden="true"><WarningFilled /></el-icon>
+            <span>{{ knowledgeError }}，当前仍显示上次加载的数据。</span>
+          </p>
+
+          <div v-if="docSources.length" class="source-list">
+            <div v-for="(source, index) in docSources" :key="index" class="source-item">
+              <el-icon :size="15" class="source-item__icon" aria-hidden="true">
+                <Link v-if="source.type === 'web'" />
+                <Document v-else />
+              </el-icon>
+              <span :title="source.source" class="source-name">{{ source.source }}</span>
+              <div class="source-item__actions">
+                <el-tag :type="source.type === 'web' ? 'warning' : 'info'" effect="plain" size="small">
+                  {{ source.type === 'web' ? '网页' : '文档' }}
+                </el-tag>
+                <el-button
+                  class="source-delete"
+                  type="danger"
+                  size="small"
+                  circle
+                  :loading="deletingSource === source.source"
+                  :disabled="uploadingDocument || (Boolean(deletingSource) && deletingSource !== source.source)"
+                  :aria-label="`删除来源 ${source.source}`"
+                  @click="handleDeleteSource(source.source)"
+                >
+                  <el-icon :size="14" aria-hidden="true"><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <el-upload
+            class="upload-control"
+            :http-request="uploadFile"
+            :show-file-list="false"
+            :disabled="knowledgeMutationPending"
+            accept=".pdf,.txt,.md,.docx"
+          >
+            <el-button type="primary" plain size="small" :loading="uploadingDocument" :disabled="knowledgeMutationPending">
+              <el-icon :size="15" aria-hidden="true"><DocumentAdd /></el-icon>
+              <span>上传文档</span>
+            </el-button>
+          </el-upload>
+        </el-collapse-item>
+
+        <el-collapse-item v-if="docSources.length" name="career">
+          <template #title>
+            <span class="collapse-title">
+              <el-icon :size="17" aria-hidden="true"><Aim /></el-icon>
+              <span>求职工具</span>
+            </span>
+          </template>
+
+          <div v-if="resumeSource" class="resume-file">
+            <el-icon :size="15" aria-hidden="true"><Document /></el-icon>
+            <span :title="resumeSource.title || resumeSource.source">{{ resumeSource.title || resumeSource.source }}</span>
+          </div>
+
+          <div class="button-grid">
+            <el-button type="primary" size="small" :disabled="!resumeSource" @click="$emit('quick-chat', '帮我分析一下我的简历')">
+              <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
+              <span>分析简历</span>
+            </el-button>
+            <el-button type="success" size="small" @click="$emit('quick-chat', '请帮我模拟面试，先问我的目标岗位，然后逐题提问并点评')">
+              <el-icon :size="15" aria-hidden="true"><ChatLineRound /></el-icon>
+              <span>模拟面试</span>
+            </el-button>
+          </div>
+
+          <div class="jd-input-area">
+            <div class="jd-input-area__heading">
+              <span class="jd-input-area__label">
+                <el-icon :size="15" aria-hidden="true"><Files /></el-icon>
+                <span>目标岗位 JD</span>
+              </span>
+              <el-button size="small" :loading="fetchingJD" @click="handleFetchJD">
+                <el-icon :size="14" aria-hidden="true"><Link /></el-icon>
+                <span>链接导入</span>
+              </el-button>
+            </div>
+            <el-input v-model="jdText" type="textarea" :rows="5" placeholder="粘贴岗位 JD" size="small" />
+            <div class="button-grid jd-actions">
+              <el-button type="success" size="small" :disabled="!jdText || !resumeSource" @click="handleMatchJob">
+                <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
+                <span>匹配岗位</span>
+              </el-button>
+              <el-button type="warning" size="small" :disabled="!jdText" @click="handleGenQuestions">
+                <el-icon :size="15" aria-hidden="true"><ChatDotRound /></el-icon>
+                <span>生成题目</span>
+              </el-button>
+            </div>
+          </div>
+        </el-collapse-item>
+
+        <el-collapse-item name="settings">
+          <template #title>
+            <span class="collapse-title">
+              <el-icon :size="17" aria-hidden="true"><Moon /></el-icon>
+              <span>设置</span>
+            </span>
+          </template>
+
+          <label class="setting-row">
+            <span class="setting-row__label">深色模式</span>
+            <el-switch v-model="isDark" size="small" aria-label="切换深色模式" @change="toggleDark" />
+          </label>
+          <div class="settings-actions">
+            <el-button size="small" plain @click="$emit('change-password')">
+              <el-icon :size="14" aria-hidden="true"><EditPen /></el-icon>
+              <span>修改密码</span>
+            </el-button>
+            <el-button v-if="isAdmin" size="small" type="warning" plain @click="$emit('open-admin')">
+              <el-icon :size="14" aria-hidden="true"><DataAnalysis /></el-icon>
+              <span>管理控制台</span>
+            </el-button>
+          </div>
+          <p class="status-bar" aria-live="polite">
+            <span :class="['status-dot', backendOnline ? 'status-on' : 'status-off']" aria-hidden="true"></span>
+            <el-icon :size="14" aria-hidden="true"><Connection /></el-icon>
+            <span>{{ backendOnline ? '服务正常' : '服务离线' }}</span>
+          </p>
+        </el-collapse-item>
+      </el-collapse>
+    </nav>
+
+    <footer class="sidebar-account">
+      <div class="sidebar-account__avatar" aria-hidden="true">
+        <el-icon :size="16"><User /></el-icon>
+      </div>
+      <div class="sidebar-account__identity">
+        <span class="sidebar-account__name">{{ currentUsername || '未登录' }}</span>
+        <span class="sidebar-account__meta">求职工作台</span>
+      </div>
+      <el-button class="sidebar-account__logout" text type="danger" size="small" @click="$emit('logout')">
+        <el-icon :size="15" aria-hidden="true"><SwitchButton /></el-icon>
+        <span>退出</span>
+      </el-button>
+    </footer>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
-  getSessions, createSession, deleteSession, renameSession,
-  getMessages, uploadPDF, getDocStatus, deleteSource, fetchUrlContent
+  Aim,
+  Briefcase,
+  ChatDotRound,
+  ChatLineRound,
+  CircleCheck,
+  Close,
+  Connection,
+  DataAnalysis,
+  Delete,
+  Document,
+  DocumentAdd,
+  Download,
+  EditPen,
+  Files,
+  FolderOpened,
+  House,
+  Link,
+  Loading,
+  Moon,
+  Plus,
+  SwitchButton,
+  User,
+  WarningFilled
+} from '@element-plus/icons-vue'
+import {
+  createSession,
+  deleteSession,
+  deleteSource,
+  fetchUrlContent,
+  getDocStatus,
+  getHealth,
+  getMessages,
+  getSessions,
+  renameSession,
+  uploadPDF
 } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete } from '@element-plus/icons-vue'
 
 const props = defineProps({
   currentUsername: { type: String, default: '' },
-  userId: { type: Number, default: null }
+  userId: { type: Number, default: null },
+  isAdmin: { type: Boolean, default: false },
+  previewMode: { type: Boolean, default: false },
+  showCloseButton: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'user-logged-in', 'show-analytics', 'logout', 'quick-chat', 'go-home'])
+const emit = defineEmits(['session-changed', 'new-session', 'clear-session', 'pdf-uploaded', 'show-analytics', 'logout', 'change-password', 'open-admin', 'quick-chat', 'go-home', 'close-navigation'])
 
-// 寻找简历文件（第一个非网页来源的文档）
-const resumeSource = computed(() => {
-  return docSources.value.find(s => s.type === 'file') || null
-})
+const resumeSource = computed(() => docSources.value.find(source => source.type === 'file') || null)
 
-const activePanels = ref(['chat'])  // 默认展开会话管理
+const activePanels = ref(['chat'])
 const sessions = ref([])
 const currentSessionId = ref(null)
-const recentMessages = ref([])
 const docCount = ref(0)
 const docSources = ref([])
+const knowledgeStatus = ref('idle')
+const knowledgeError = ref('')
+const hasKnowledgeSnapshot = ref(false)
 const deletingSource = ref(null)
+const uploadingDocument = ref(false)
+const creatingSession = ref(false)
+const clearingSession = ref(false)
+const renamingSession = ref(false)
+const exportingSession = ref(false)
+const initializingUserData = ref(false)
 const jdText = ref('')
 const fetchingJD = ref(false)
+const sessionActionPending = computed(() => (
+  creatingSession.value ||
+  clearingSession.value ||
+  renamingSession.value ||
+  exportingSession.value ||
+  initializingUserData.value
+))
+const knowledgeMutationPending = computed(() => (
+  uploadingDocument.value || Boolean(deletingSource.value) || initializingUserData.value
+))
 
 const handleMatchJob = () => {
   if (!jdText.value) return
-  const msg = '请根据以下岗位JD，帮我匹配我的简历：\n\n' + jdText.value
-  emit('quick-chat', msg)
+  const message = `请根据以下岗位JD，帮我匹配我的简历：\n\n${jdText.value}`
+  emit('quick-chat', message)
 }
 
-// 从URL抓取JD内容填入输入框
 const handleFetchJD = async () => {
+  if (fetchingJD.value) return
+  fetchingJD.value = true
   try {
-    const { value: url } = await ElMessageBox.prompt('请输入招聘页面的URL', '链接导入JD', {
-      confirmButtonText: '抓取', cancelButtonText: '取消',
+    const { value: url } = await ElMessageBox.prompt('请输入招聘页面的 URL', '链接导入 JD', {
+      confirmButtonText: '抓取',
+      cancelButtonText: '取消',
       inputPlaceholder: 'https://www.zhipin.com/...'
     })
     if (!url || !url.trim()) return
-    fetchingJD.value = true
     const res = await fetchUrlContent(url.trim())
     const title = res.data.title || ''
     const text = res.data.text || ''
-    jdText.value = (title ? '【' + title + '】\n' : '') + text
-    ElMessage.success('JD内容已导入')
+    jdText.value = `${title ? `【${title}】\n` : ''}${text}`
+    ElMessage.success('JD 内容已导入')
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('抓取失败，请检查URL是否正确')
+    if (e !== 'cancel') ElMessage.error('抓取失败，请检查 URL 是否正确')
   } finally {
     fetchingJD.value = false
   }
@@ -151,75 +401,77 @@ const handleFetchJD = async () => {
 
 const handleGenQuestions = () => {
   if (!jdText.value) return
-  const msg = '请根据以下岗位JD生成5道面试题：\n\n' + jdText.value
-  emit('quick-chat', msg)
+  const message = `请根据以下岗位JD生成5道面试题：\n\n${jdText.value}`
+  emit('quick-chat', message)
 }
 
-// 当 userId 变化时（登录后），自动加载
 const initUserData = async () => {
-  if (!props.userId) return
-  currentSessionId.value = null
-  recentMessages.value = []
-  docSources.value = []
+  if (!props.userId || initializingUserData.value) return
+  initializingUserData.value = true
+  try {
+    currentSessionId.value = null
+    sessions.value = []
+    docSources.value = []
+    docCount.value = 0
+    hasKnowledgeSnapshot.value = false
 
-  await loadSessions()
-  await loadDocStatus()
+    await Promise.all([loadSessions(), loadDocStatus()])
 
-  if (sessions.value.length === 0) {
-    const now = new Date()
-    const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    const newRes = await createSession(props.userId, name)
-    currentSessionId.value = newRes.data.session_id
-    emit('new-session', currentSessionId.value)
-    await loadSessions()
-    switchSession(currentSessionId.value)
-  } else {
-    currentSessionId.value = sessions.value[0].id
-    switchSession(currentSessionId.value)
+    if (sessions.value.length === 0) {
+      const now = new Date()
+      const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      const newRes = await createSession(name)
+      currentSessionId.value = newRes.data.session_id
+      emit('new-session', currentSessionId.value)
+      await loadSessions()
+    } else {
+      currentSessionId.value = sessions.value[0].id
+      await switchSession(currentSessionId.value)
+    }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '用户数据加载失败，请稍后重试')
+  } finally {
+    initializingUserData.value = false
   }
 }
 
 watch(() => props.userId, (newVal) => {
-  if (newVal) initUserData()
+  if (newVal && !props.previewMode) initUserData()
 })
 
-// 加载会话列表
 const loadSessions = async () => {
   if (!props.userId) return
-  const res = await getSessions(props.userId)
+  const res = await getSessions()
   sessions.value = res.data
-  if (sessions.value.length && !currentSessionId.value) {
-    currentSessionId.value = sessions.value[0].id
-    switchSession(currentSessionId.value)
+  if (currentSessionId.value && !sessions.value.some(session => session.id === currentSessionId.value)) {
+    currentSessionId.value = null
   }
 }
 
-// 切换会话
-const switchSession = async (sessionId) => {
+const switchSession = (sessionId) => {
   emit('session-changed', sessionId)
+}
+
+const newSession = async () => {
+  if (!props.userId || sessionActionPending.value) return
+  creatingSession.value = true
   try {
-    const res = await getMessages(sessionId)
-    recentMessages.value = res.data.slice(-5)
+    const now = new Date()
+    const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    const res = await createSession(name)
+    currentSessionId.value = res.data.session_id
+    emit('new-session', currentSessionId.value)
+    await loadSessions()
   } catch (e) {
-    recentMessages.value = []
+    ElMessage.error(e.response?.data?.detail || '新建会话失败')
+  } finally {
+    creatingSession.value = false
   }
 }
 
-// 新建会话
-const newSession = async () => {
-  if (!props.userId) return
-  const now = new Date()
-  const name = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-  const res = await createSession(props.userId, name)
-  currentSessionId.value = res.data.session_id
-  emit('new-session', currentSessionId.value)
-  await loadSessions()
-  switchSession(currentSessionId.value)
-}
-
-// 清空会话
 const clearSession = async () => {
-  if (!currentSessionId.value) return
+  if (!currentSessionId.value || sessionActionPending.value) return
+  clearingSession.value = true
   try {
     await ElMessageBox.confirm(
       '确定要清空当前会话吗？所有对话记录将被永久删除。',
@@ -227,6 +479,7 @@ const clearSession = async () => {
       { confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'warning' }
     )
     await deleteSession(currentSessionId.value)
+    currentSessionId.value = null
     emit('clear-session')
     await loadSessions()
     if (sessions.value.length) {
@@ -234,112 +487,111 @@ const clearSession = async () => {
       switchSession(currentSessionId.value)
     } else {
       currentSessionId.value = null
-      recentMessages.value = []
     }
   } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error('清空会话失败')
-    }
+    if (e !== 'cancel') ElMessage.error('清空会话失败')
+  } finally {
+    clearingSession.value = false
   }
 }
 
-// 导出对话
 const exportSession = async () => {
+  if (exportingSession.value || sessionActionPending.value) return
   if (!currentSessionId.value) {
     ElMessage.warning('请先选择会话')
     return
   }
+  exportingSession.value = true
   try {
     const res = await getMessages(currentSessionId.value)
-    const msgs = res.data
-    if (!msgs.length) {
+    const messages = res.data
+    if (!messages.length) {
       ElMessage.info('当前没有对话记录')
       return
     }
-    let text = ''
-    msgs.forEach(m => {
-      text += `${m.role === 'user' ? '用户' : '助手'}：${m.content}\n\n`
-    })
+    const text = messages.map(message => `${message.role === 'user' ? '用户' : '助手'}：${message.content}`).join('\n\n')
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `对话记录_${new Date().toLocaleString()}.txt`
-    a.click()
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `对话记录_${new Date().toLocaleString()}.txt`
+    anchor.click()
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
   } catch (e) {
     ElMessage.error('导出失败')
+  } finally {
+    exportingSession.value = false
   }
 }
 
-// 上传文档（支持 PDF / TXT / MD / DOCX）
 const uploadFile = async (option) => {
+  if (knowledgeMutationPending.value) return
   const file = option.file
-  const alreadyExists = docSources.value.some(s => s.source === file.name)
+  const alreadyExists = docSources.value.some(source => source.source === file.name)
   if (alreadyExists) {
     ElMessage.info('该文件已在当前知识库中，无需重复上传')
     return
   }
 
+  uploadingDocument.value = true
   try {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('user_id', props.userId)
     const res = await uploadPDF(formData)
 
-    // 无论后台还是同步，只要状态码 200 就视为成功
     if (res.status === 200) {
-      // 立刻刷新知识库来源列表
       ElMessage.success(res.data.message || '文档上传成功，知识库已更新')
       emit('pdf-uploaded')
-
-      // 异步刷新知识库状态（不阻塞 UI）
-      loadDocStatus()
-
-      // 如果有当前会话，重新加载消息（但不强制等待）
-      if (currentSessionId.value) {
-        switchSession(currentSessionId.value)
-      }
+      await loadDocStatus()
+      if (currentSessionId.value) await switchSession(currentSessionId.value)
     } else {
       ElMessage.error('上传返回异常状态')
     }
-  } catch (e) {
-    console.error('上传失败详情:', e)
+  } catch {
     ElMessage.error('上传失败，请稍后重试')
+  } finally {
+    uploadingDocument.value = false
   }
 }
 
-// 查询文档数量（传入 userId）
+let knowledgeRequestId = 0
 const loadDocStatus = async () => {
+  if (props.userId === null || props.userId === undefined) return
+  const requestId = ++knowledgeRequestId
+  knowledgeStatus.value = 'loading'
+  knowledgeError.value = ''
   try {
-    const res = await getDocStatus(props.userId)
+    const res = await getDocStatus()
+    if (requestId !== knowledgeRequestId) return
     docCount.value = res.data.doc_count
     docSources.value = res.data.sources || []
+    hasKnowledgeSnapshot.value = true
+    knowledgeStatus.value = 'ready'
   } catch (e) {
-    docCount.value = 0
-    docSources.value = []
+    if (requestId !== knowledgeRequestId) return
+    knowledgeError.value = e.response?.data?.detail || '知识库刷新失败'
+    knowledgeStatus.value = 'error'
   }
 }
 
-// 暴露给父组件调用
 defineExpose({ loadDocStatus })
 
-// 暗色模式
 const isDark = ref(false)
 const toggleDark = () => {
   document.documentElement.classList.toggle('dark', isDark.value)
+  document.documentElement.dataset.theme = isDark.value ? 'dark' : 'light'
   localStorage.setItem('ai_dark_mode', isDark.value ? '1' : '0')
 }
 
-// 会话重命名
 const handleRenameSession = async () => {
-  if (!currentSessionId.value) return
+  if (!currentSessionId.value || sessionActionPending.value) return
+  renamingSession.value = true
   try {
     const { value } = await ElMessageBox.prompt('请输入新名称', '重命名会话', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      inputValue: sessions.value.find(s => s.id === currentSessionId.value)?.name || ''
+      inputValue: sessions.value.find(session => session.id === currentSessionId.value)?.name || ''
     })
     if (value && value.trim()) {
       await renameSession(currentSessionId.value, value.trim())
@@ -348,50 +600,52 @@ const handleRenameSession = async () => {
     }
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('重命名失败')
+  } finally {
+    renamingSession.value = false
   }
 }
 
-// 系统状态检测
 const backendOnline = ref(true)
 let statusTimer = null
 const checkBackendStatus = async () => {
   try {
-    const res = await fetch('/api/analytics/overview', { signal: AbortSignal.timeout(5000) })
-    backendOnline.value = res.ok
+    await getHealth()
+    backendOnline.value = true
   } catch {
     backendOnline.value = false
   }
 }
 
-// 删除知识库来源
 const handleDeleteSource = async (source) => {
-  if (!props.userId) return
+  if (!props.userId || knowledgeMutationPending.value) return
+  deletingSource.value = source
   try {
     await ElMessageBox.confirm(
       `确定要删除来源「${source}」的所有内容吗？此操作不可恢复。`,
       '确认删除',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    deletingSource.value = source
-    await deleteSource(props.userId, source)
+    await deleteSource(source)
     ElMessage.success('已删除')
     await loadDocStatus()
   } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.detail || '删除失败')
-    }
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '删除失败')
   } finally {
     deletingSource.value = null
   }
 }
 
 onMounted(() => {
-  if (props.userId) initUserData()
-  // 初始化暗色模式状态
+  if (props.userId && !props.previewMode) initUserData()
   isDark.value = document.documentElement.classList.contains('dark')
-  // 启动系统状态检测
-  checkBackendStatus()
-  statusTimer = setInterval(checkBackendStatus, 30000)
+  if (props.previewMode) {
+    backendOnline.value = false
+    hasKnowledgeSnapshot.value = true
+    knowledgeStatus.value = 'ready'
+  } else {
+    checkBackendStatus()
+    statusTimer = setInterval(checkBackendStatus, 30000)
+  }
 })
 
 onUnmounted(() => {
@@ -400,68 +654,468 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ============ 首页按钮 ============ */
-.home-btn { width:100%; margin-bottom:8px; background: linear-gradient(135deg, #f0f4ff, #f8f0ff); border: 1.5px solid #e0e4f0; color: #5b7fff; font-weight: 600; }
-.home-btn:hover { border-color: #5b7fff; background: linear-gradient(135deg, #e8edff, #f0e8ff); }
-
-/* ============ 用户栏 ============ */
-.user-info-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f8f9fd; border-radius: 12px; margin-bottom: 4px; }
-.user-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: linear-gradient(135deg, #5b7fff, #6c5ce7);
-  display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--color-text-primary);
 }
-.user-name { flex: 1; font-weight: 600; color: #303133; font-size: 14px; }
-.logout-btn { flex-shrink: 0; font-size: 12px; }
 
-/* ============ 折叠面板 ============ */
-.sidebar-collapse { border: none; }
-.sidebar-collapse :deep(.el-collapse-item) { margin-bottom: 2px; }
+.sidebar-brand {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-5);
+  background: var(--color-surface);
+}
+
+.sidebar-brand__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.sidebar-brand__copy,
+.sidebar-account__identity {
+  display: grid;
+  min-width: 0;
+}
+
+.sidebar-brand__copy {
+  flex: 1;
+}
+
+.sidebar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    color var(--duration-control) var(--ease-standard),
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard);
+}
+
+.sidebar-close:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.sidebar-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-brand__name {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-component-title);
+  font-weight: 700;
+  line-height: var(--line-height-component-title);
+}
+
+.sidebar-brand__meta,
+.sidebar-account__meta {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-navigation {
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-home {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 42px;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard),
+    color var(--duration-control) var(--ease-standard);
+}
+
+.sidebar-home:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+  color: var(--color-primary-hover);
+}
+
+.sidebar-home:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-collapse {
+  border: 0;
+}
+
+.sidebar-collapse :deep(.el-collapse-item) {
+  margin-bottom: var(--space-1);
+}
+
 .sidebar-collapse :deep(.el-collapse-item__header) {
-  font-size: 13px; font-weight: 600; border: none;
-  padding: 10px 12px; border-radius: 10px;
-  color: #444; background: transparent;
-  transition: all 0.2s ease;
+  min-height: 42px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  line-height: var(--line-height-label);
+  transition:
+    background-color var(--duration-control) var(--ease-standard),
+    color var(--duration-control) var(--ease-standard);
 }
-.sidebar-collapse :deep(.el-collapse-item__header:hover) { background: #f5f7fc; color: #5b7fff; }
-.sidebar-collapse :deep(.el-collapse-item__wrap) { border: none; background: transparent; }
-.sidebar-collapse :deep(.el-collapse-item__content) { padding: 6px 4px 14px; }
 
-/* ============ 按钮组 ============ */
-.btn-stack { display: flex; flex-direction: column; gap: 6px; }
-.btn-stack .el-button { border-radius: 10px; transition: all 0.2s ease; }
-.btn-stack .el-button:hover { transform: translateY(-1px); }
+.sidebar-collapse :deep(.el-collapse-item__header:hover) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
 
-/* ============ 来源项 ============ */
+.sidebar-collapse :deep(.el-collapse-item__arrow) {
+  color: var(--color-text-muted);
+}
+
+.sidebar-collapse :deep(.el-collapse-item__wrap) {
+  border: 0;
+  background: transparent;
+}
+
+.sidebar-collapse :deep(.el-collapse-item__content) {
+  padding: var(--space-2) var(--space-1) var(--space-4);
+}
+
+.collapse-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.session-picker,
+.button-grid,
+.tool-btns,
+.jd-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.session-picker__select {
+  min-width: 0;
+}
+
+.icon-button {
+  width: 32px;
+  padding: 0;
+}
+
+.button-stack {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.button-stack :deep(.el-button),
+.button-grid :deep(.el-button),
+.upload-control :deep(.el-button) {
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+}
+
+.button-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.knowledge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.knowledge-refreshing,
+.knowledge-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.knowledge-refreshing {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.knowledge-warning {
+  border: 1px solid color-mix(in srgb, var(--color-warning) 32%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+  color: var(--color-text-secondary);
+}
+
+.knowledge-warning .el-icon {
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+  color: var(--color-warning);
+}
+
+.source-list {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+
 .source-item {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 4px; padding: 6px 8px; font-size: 11px; color: #606266;
-  border-radius: 8px; margin-bottom: 2px;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  transition: background-color var(--duration-control) var(--ease-standard);
 }
-.source-item:hover { background: #f5f7fc; }
-.source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
-/* ============ 设置行 ============ */
-.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; font-size: 13px; border-radius: 8px; }
-.setting-row:hover { background: #f5f7fc; }
+.source-item:hover {
+  background: var(--color-surface-hover);
+}
 
-/* ============ 状态栏 ============ */
-.status-bar { display: flex; align-items: center; gap: 6px; padding: 8px; font-size: 12px; color: #909399; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.status-on { background: #67C23A; box-shadow: 0 0 6px rgba(103,194,58,0.4); }
-.status-off { background: #F56C6C; box-shadow: 0 0 6px rgba(245,108,108,0.4); }
+.source-item__icon {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
 
-/* ============ 求职工具箱 ============ */
+.source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-item__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.source-delete {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.upload-control {
+  display: block;
+  margin-top: var(--space-3);
+}
+
 .resume-file {
-  padding: 8px 12px; background: linear-gradient(135deg, #ecf5ff, #e8f0fe);
-  border-radius: 10px; margin-bottom: 10px; font-size: 12px; color: #409EFF;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-weight: 500; border: 1px solid #d9e8ff;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
 }
-.tool-btns { display: flex; gap: 6px; }
-.jd-input-area { margin-top: 10px; }
-.jd-input-area :deep(.el-textarea__inner) { border-radius: 10px; font-size: 12px; border-color: #e8ecf2; background: #fafbfc; transition: all 0.2s; }
-.jd-input-area :deep(.el-textarea__inner:focus) { border-color: #5b7fff; box-shadow: 0 0 0 2px rgba(91,127,255,0.08); background: #fff; }
-.jd-btns { display: flex; gap: 6px; margin-top: 8px; }
+
+.resume-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jd-input-area {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.jd-input-area__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.jd-input-area__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+}
+
+.jd-input-area :deep(.el-textarea__inner) {
+  min-height: 104px;
+  border-color: var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}
+
+.jd-input-area :deep(.el-textarea__inner:focus) {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: var(--focus-ring);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 36px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  cursor: pointer;
+  transition: background-color var(--duration-control) var(--ease-standard);
+}
+
+.setting-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.setting-row__label {
+  font-weight: 500;
+}
+
+.settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.settings-actions .el-button {
+  width: 100%;
+  margin: 0;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.status-on {
+  background: var(--color-success);
+}
+
+.status-off {
+  background: var(--color-danger);
+}
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2) var(--space-1);
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.sidebar-account__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+}
+
+.sidebar-account__identity {
+  flex: 1;
+}
+
+.sidebar-account__name {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  line-height: var(--line-height-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account__logout {
+  margin: 0;
+}
+
+@media (max-width: 767px) {
+  .sidebar-brand {
+    padding-top: var(--space-2);
+  }
+
+  .sidebar-account {
+    padding-bottom: var(--space-2);
+  }
+}
 </style>
