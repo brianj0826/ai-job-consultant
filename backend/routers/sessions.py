@@ -1,48 +1,98 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+
+from backend.services.access import current_user_id, require_owned_session
+from backend.services.auth import require_business_csrf, require_current_user
 from backend.services.database import (
-    get_user_sessions, create_session, get_session_messages,
-    delete_session, rename_session
+    create_session,
+    delete_session,
+    get_session_messages,
+    get_user_sessions,
+    rename_session,
 )
+
 
 router = APIRouter()
 
+
 @router.get("/")
-def list_sessions(user_id: int):
-    sessions = get_user_sessions(user_id)
+def list_sessions(current_user: dict = Depends(require_current_user)):
+    """List only the authenticated user's conversations."""
+    sessions = get_user_sessions(current_user_id(current_user))
     return [{"id": s[0], "name": s[1], "created_at": s[2]} for s in sessions]
 
+
 class SessionCreate(BaseModel):
-    user_id: int
     name: str = "新对话"
 
-@router.post("/")
-def new_session(data: SessionCreate):
-    session_id = create_session(data.user_id, data.name)
+
+@router.post("/", dependencies=[Depends(require_business_csrf)])
+def new_session(
+    data: SessionCreate,
+    current_user: dict = Depends(require_current_user),
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="会话名称不能为空")
+    if len(name) > 255:
+        raise HTTPException(status_code=400, detail="会话名称不能超过 255 个字符")
+
+    session_id = create_session(current_user_id(current_user), name)
     return {"session_id": session_id}
 
+
 def _fmt_ts(dt):
-    """格式化时间为 ISO UTC 字符串，带 Z 后缀让前端正确解析"""
+    """Format database datetimes consistently for browser clients."""
     if dt is None:
         return None
-    return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 @router.get("/{session_id}/messages")
-def get_messages(session_id: int, limit: int = 50):
-    msgs = get_session_messages(session_id, limit)
-    return [{"id": m[0], "role": m[1], "content": m[2], "feedback": m[3], "timestamp": _fmt_ts(m[4])} for m in msgs]
+def get_messages(
+    session_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(require_current_user),
+):
+    require_owned_session(session_id, current_user)
+    messages = get_session_messages(session_id, limit)
+    return [
+        {
+            "id": message[0],
+            "role": message[1],
+            "content": message[2],
+            "feedback": message[3],
+            "timestamp": _fmt_ts(message[4]),
+        }
+        for message in messages
+    ]
+
 
 class RenameRequest(BaseModel):
     name: str
 
-@router.put("/{session_id}/rename")
-def rename(session_id: int, req: RenameRequest):
-    if not req.name or not req.name.strip():
-        raise HTTPException(status_code=400, detail="名称不能为空")
-    rename_session(session_id, req.name.strip())
-    return {"ok": True, "name": req.name.strip()}
 
-@router.delete("/{session_id}")
-def remove_session(session_id: int):
+@router.put("/{session_id}/rename", dependencies=[Depends(require_business_csrf)])
+def rename(
+    session_id: int,
+    req: RenameRequest,
+    current_user: dict = Depends(require_current_user),
+):
+    require_owned_session(session_id, current_user)
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="名称不能为空")
+    if len(name) > 255:
+        raise HTTPException(status_code=400, detail="名称不能超过 255 个字符")
+    rename_session(session_id, name)
+    return {"ok": True, "name": name}
+
+
+@router.delete("/{session_id}", dependencies=[Depends(require_business_csrf)])
+def remove_session(
+    session_id: int,
+    current_user: dict = Depends(require_current_user),
+):
+    require_owned_session(session_id, current_user)
     delete_session(session_id)
     return {"ok": True}
