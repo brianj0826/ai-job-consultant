@@ -24,16 +24,22 @@
       @score="focusInterviewQuestions"
     />
 
-    <div class="resource-workspace" :class="{ 'resource-workspace--editing': editorOpen }">
+    <div
+      class="resource-workspace"
+      :class="{ 'resource-workspace--editing': editorOpen }"
+      :data-resource="resource"
+    >
       <section class="resource-panel" :aria-labelledby="`${resource}-list-title`">
         <div class="resource-panel__heading">
-          <div>
+          <div class="resource-panel__identity">
+            <p class="technical-label">RESOURCE INDEX</p>
             <h3 :id="`${resource}-list-title`">{{ definition.title }}记录</h3>
-            <p v-if="!loading && !error" aria-live="polite">
+            <p v-if="!loading && !error" class="resource-panel__count" aria-live="polite">
               共 <span class="tabular-nums">{{ items.length }}</span> 条
             </p>
           </div>
           <el-button
+            class="resource-panel__refresh"
             text
             :loading="loading"
             aria-label="刷新列表"
@@ -99,7 +105,7 @@
               </dl>
             </div>
             <div class="resource-item__actions">
-              <el-button size="small" @click="openEdit(item)">
+              <el-button size="small" @click="openEdit(item, $event)">
                 <el-icon aria-hidden="true"><EditPen /></el-icon>
                 {{ resource === 'interviews' ? '管理' : '编辑' }}
               </el-button>
@@ -119,7 +125,12 @@
         </ul>
       </section>
 
-      <aside v-if="editorOpen" class="resource-editor" :aria-labelledby="`${resource}-editor-title`">
+      <aside
+        v-if="editorOpen"
+        ref="editorRef"
+        class="resource-editor"
+        :aria-labelledby="`${resource}-editor-title`"
+      >
         <div class="resource-editor__heading">
           <div>
             <p class="technical-label">{{ editingId ? 'EDIT RECORD' : 'NEW RECORD' }}</p>
@@ -354,6 +365,7 @@ const relatedJobs = ref([])
 const loading = ref(false)
 const error = ref('')
 const editorOpen = ref(false)
+const editorRef = ref(null)
 const editingId = ref(null)
 const saving = ref(false)
 const deletingId = ref(null)
@@ -372,6 +384,16 @@ const exportingData = ref(false)
 const clearingData = ref(false)
 let loadRequestId = 0
 let detailRequestId = 0
+let lastEditorTrigger = null
+
+const focusEditor = () => {
+  nextTick(() => {
+    editorRef.value?.scrollIntoView?.({ block: 'nearest' })
+    editorRef.value?.querySelector?.(
+      '.resource-form input:not([type="hidden"]):not([disabled]), .resource-form textarea:not([disabled]), .resource-form [role="combobox"]:not([aria-disabled="true"])'
+    )?.focus?.()
+  })
+}
 
 const unwrapItems = (response) => {
   const payload = response?.data
@@ -418,12 +440,13 @@ const loadResources = async () => {
   }
 }
 
-const openCreate = () => {
+const openCreate = (event) => {
+  lastEditorTrigger = event?.currentTarget || document.activeElement
   editingId.value = null
   formError.value = ''
   resetForm()
   editorOpen.value = true
-  nextTick(() => document.getElementById(`${props.resource}-${definition.value.fields[0]?.key}`)?.focus())
+  focusEditor()
 }
 
 const loadInterviewDetail = async (interviewId, { openEditor = false } = {}) => {
@@ -449,11 +472,13 @@ const loadInterviewDetail = async (interviewId, { openEditor = false } = {}) => 
   }
 }
 
-const openEdit = async (item) => {
+const openEdit = async (item, event) => {
+  lastEditorTrigger = event?.currentTarget || document.activeElement
   formError.value = ''
   if (props.resource === 'interviews') {
     selectedInterview.value = item
     await loadInterviewDetail(item.id, { openEditor: true })
+    focusEditor()
     return
   }
   let detail = item
@@ -468,12 +493,21 @@ const openEdit = async (item) => {
   editingId.value = item.id
   resetForm(detail)
   editorOpen.value = true
+  focusEditor()
 }
 
 const closeEditor = () => {
+  const shouldRestoreFocus = editorRef.value?.contains?.(document.activeElement)
+  const focusTarget = lastEditorTrigger
   editorOpen.value = false
   editingId.value = null
   formError.value = ''
+  lastEditorTrigger = null
+  if (shouldRestoreFocus && focusTarget) {
+    nextTick(() => {
+      if (focusTarget.isConnected) focusTarget.focus()
+    })
+  }
 }
 
 const fieldId = (field) => `${props.resource}-${field.key}`
@@ -736,13 +770,15 @@ watch(() => props.resource, () => {
 
 <style scoped>
 .resource-workspace {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
 }
 
 .resource-workspace--editing {
-  grid-template-columns: minmax(0, 1.2fr) minmax(20rem, .8fr);
+  grid-template-columns: minmax(0, 1.12fr) minmax(22rem, .88fr);
   align-items: start;
 }
 
@@ -750,13 +786,28 @@ watch(() => props.resource, () => {
 .resource-editor,
 .interview-detail,
 .career-data {
+  position: relative;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
 }
 
+.resource-panel::before,
+.interview-detail::before {
+  position: absolute;
+  z-index: 1;
+  top: -1px;
+  right: clamp(3rem, 16vw, 14rem);
+  left: clamp(1rem, 4vw, 3rem);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-cyan), transparent);
+  content: '';
+  opacity: .72;
+  pointer-events: none;
+}
+
 .resource-panel {
-  min-width: 0;
   overflow: hidden;
 }
 
@@ -767,8 +818,23 @@ watch(() => props.resource, () => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
+  min-height: 5.75rem;
+  padding: var(--space-5) clamp(var(--space-4), 3vw, var(--space-6));
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+}
+
+.resource-panel__identity {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, auto) auto;
+  gap: 0 var(--space-3);
+  align-items: center;
+}
+
+.resource-panel__identity .technical-label {
+  grid-column: 1 / -1;
+  margin: 0 0 var(--space-1);
 }
 
 .resource-panel__heading h3,
@@ -776,30 +842,93 @@ watch(() => props.resource, () => {
 .interview-detail__heading h3,
 .career-data h3 {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-section-title);
   line-height: var(--line-height-section-title);
 }
 
-.resource-panel__heading p {
-  margin: var(--space-1) 0 0;
+.resource-editor__heading > div,
+.interview-detail__heading > div,
+.career-data > div:first-child {
+  min-width: 0;
+}
+
+.resource-panel__count {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  padding: 0 var(--space-2);
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+.resource-panel__count .tabular-nums {
+  margin-inline: .2rem;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.resource-panel__refresh {
+  flex: 0 0 auto;
+}
+
+.resource-panel__refresh:deep(.el-icon) {
+  color: var(--color-cyan);
 }
 
 .resource-state {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  min-height: 20rem;
+  min-height: clamp(19rem, 42vh, 25rem);
   place-items: center;
   align-content: center;
   gap: var(--space-3);
-  padding: var(--space-10);
+  padding: clamp(var(--space-8), 6vw, var(--space-16));
   color: var(--color-text-secondary);
   text-align: center;
+  overflow: hidden;
+}
+
+.resource-state::before,
+.resource-state::after {
+  position: absolute;
+  z-index: -1;
+  border: 1px solid var(--color-orbit);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+.resource-state::before {
+  width: min(20rem, 66vw);
+  aspect-ratio: 1;
+  opacity: .7;
+}
+
+.resource-state::after {
+  width: min(12rem, 42vw);
+  aspect-ratio: 1;
+  border-color: var(--color-orbit-strong);
+  background: radial-gradient(circle, var(--color-aurora-violet-soft), transparent 68%);
 }
 
 .resource-state > .el-icon {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 1px solid var(--color-orbit-strong);
+  border-radius: 50%;
+  background: var(--color-surface);
   color: var(--color-primary);
-  font-size: 2rem;
+  font-size: 1.25rem;
 }
 
 .resource-state strong {
@@ -808,19 +937,28 @@ watch(() => props.resource, () => {
 }
 
 .resource-state p {
-  max-width: 38rem;
+  max-width: 34rem;
   margin: 0;
+  line-height: var(--line-height-body);
 }
 
 .resource-state--error > .el-icon {
+  border-color: color-mix(in srgb, var(--color-danger) 32%, transparent);
+  background: var(--color-danger-soft);
   color: var(--color-danger);
 }
 
+.resource-state--error::after {
+  border-color: color-mix(in srgb, var(--color-danger) 22%, transparent);
+  background: radial-gradient(circle, var(--color-danger-soft), transparent 68%);
+}
+
 .resource-state__loader {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border: 2px solid var(--color-border-strong);
   border-top-color: var(--color-primary);
+  border-right-color: var(--color-cyan);
   border-radius: 50%;
   animation: resource-spin .8s linear infinite;
 }
@@ -838,13 +976,17 @@ watch(() => props.resource, () => {
 }
 
 .resource-item {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-5);
   align-items: center;
-  padding: var(--space-5) var(--space-6);
+  min-height: 7.5rem;
+  padding: var(--space-5) clamp(var(--space-4), 3vw, var(--space-6));
   border-bottom: 1px solid var(--color-border);
-  transition: background-color var(--duration-control) var(--ease-standard);
+  transition:
+    background-color var(--duration-control) var(--ease-standard),
+    box-shadow var(--duration-control) var(--ease-standard);
 }
 
 .resource-item:last-child {
@@ -857,7 +999,20 @@ watch(() => props.resource, () => {
 }
 
 .resource-item--selected {
-  box-shadow: inset 3px 0 var(--color-primary);
+  box-shadow: inset 3px 0 var(--color-primary), inset 0 0 3rem var(--color-primary-soft);
+}
+
+.resource-item--selected::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  background: var(--color-cyan);
+  box-shadow: 0 0 0 4px var(--color-info-soft);
+  content: '';
+  transform: translate(-50%, -50%);
 }
 
 .resource-item__body {
@@ -866,15 +1021,17 @@ watch(() => props.resource, () => {
 
 .resource-item__title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .resource-item h4 {
   min-width: 0;
   margin: 0;
   overflow: hidden;
+  color: var(--color-text-primary);
   font-size: var(--font-size-component-title);
   line-height: var(--line-height-component-title);
   text-overflow: ellipsis;
@@ -884,10 +1041,11 @@ watch(() => props.resource, () => {
 .resource-status,
 .question-item__score {
   display: inline-flex;
-  min-height: 1.5rem;
+  min-height: 1.625rem;
   align-items: center;
   flex: 0 0 auto;
-  padding: 0 var(--space-2);
+  padding: 0 .625rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
   border-radius: var(--radius-pill);
   background: var(--color-primary-soft);
   color: var(--color-primary);
@@ -897,18 +1055,28 @@ watch(() => props.resource, () => {
 
 .resource-item__summary {
   display: -webkit-box;
-  margin: var(--space-2) 0 0;
+  max-width: 70ch;
+  margin: .375rem 0 0;
   overflow: hidden;
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .resource-item :deep(.el-progress) {
-  max-width: 24rem;
+  max-width: 28rem;
   margin-top: var(--space-3);
+}
+
+.resource-item :deep(.el-progress-bar__outer) {
+  background: var(--color-surface-hover);
+}
+
+.resource-item :deep(.el-progress-bar__inner) {
+  background: var(--aurora-gradient);
 }
 
 .resource-item__metadata {
@@ -921,6 +1089,13 @@ watch(() => props.resource, () => {
 .resource-item__metadata > div {
   display: flex;
   gap: var(--space-1);
+  align-items: baseline;
+}
+
+.resource-item__metadata > div + div::before {
+  margin-right: var(--space-2);
+  color: var(--color-border-strong);
+  content: '/';
 }
 
 .resource-item__metadata dt,
@@ -932,6 +1107,7 @@ watch(() => props.resource, () => {
 
 .resource-item__actions {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
@@ -942,7 +1118,27 @@ watch(() => props.resource, () => {
 .resource-editor {
   position: sticky;
   top: var(--space-4);
+  display: grid;
+  max-height: calc(100dvh - var(--topbar-height) - var(--space-8));
+  grid-template-rows: auto minmax(0, 1fr);
+  scroll-margin-top: calc(48px + var(--space-5));
   overflow: hidden;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-elevated);
+}
+
+.resource-editor::before {
+  position: absolute;
+  z-index: 2;
+  top: -1px;
+  right: 12%;
+  left: 12%;
+  height: 2px;
+  background: var(--aurora-gradient);
+  content: '';
+  opacity: .88;
+  pointer-events: none;
 }
 
 .resource-editor__heading .technical-label,
@@ -963,23 +1159,41 @@ watch(() => props.resource, () => {
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
+  transition:
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard),
+    color var(--duration-control) var(--ease-standard);
 }
 
 .resource-editor__close:hover,
 .question-form__heading button:hover {
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.resource-editor__close:focus-visible,
+.question-form__heading button:focus-visible {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: var(--focus-ring-strong);
 }
 
 .resource-form,
 .question-form {
   display: grid;
+  min-width: 0;
   gap: var(--space-5);
   padding: var(--space-6);
 }
 
+.resource-editor .resource-form {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .resource-form__error {
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-danger-soft);
@@ -988,12 +1202,18 @@ watch(() => props.resource, () => {
 
 .resource-field {
   display: grid;
+  min-width: 0;
   gap: var(--space-2);
+}
+
+.resource-field + .resource-field {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .resource-field > label,
 .question-form > label {
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   font-size: var(--font-size-label);
   font-weight: 600;
 }
@@ -1007,9 +1227,22 @@ watch(() => props.resource, () => {
   width: 100%;
 }
 
+.resource-field :deep(.el-input__wrapper),
+.resource-field :deep(.el-select__wrapper) {
+  min-height: 44px;
+}
+
+.resource-field :deep(.el-textarea__inner) {
+  padding: var(--space-3);
+  line-height: var(--line-height-body);
+  resize: vertical;
+}
+
 .resource-native-input {
+  box-sizing: border-box;
   width: 100%;
-  min-height: var(--control-height-default);
+  min-width: 0;
+  min-height: 44px;
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
@@ -1020,13 +1253,33 @@ watch(() => props.resource, () => {
 
 .resource-native-input:focus {
   border-color: var(--color-primary);
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-strong);
+}
+
+.resource-native-input:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
 }
 
 .resource-field__hint {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
+  overflow-wrap: anywhere;
+}
+
+.resource-field__hint a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-underline-offset: .2em;
+}
+
+.resource-field__hint a:focus-visible {
+  border-radius: .2rem;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .resource-range {
@@ -1038,7 +1291,15 @@ watch(() => props.resource, () => {
 
 .resource-range input {
   width: 100%;
+  min-height: 44px;
   accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.resource-range input:focus-visible {
+  border-radius: var(--radius-control);
+  outline: none;
+  box-shadow: var(--focus-ring-strong);
 }
 
 .resource-range output {
@@ -1051,16 +1312,18 @@ watch(() => props.resource, () => {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
-  padding-top: var(--space-2);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .resource-form__actions .el-button {
+  min-height: 44px;
   margin: 0;
 }
 
 .interview-detail,
 .career-data {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
   overflow: hidden;
 }
 
@@ -1076,11 +1339,15 @@ watch(() => props.resource, () => {
 }
 
 .interview-detail__state--error {
-  color: var(--color-danger);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  background: var(--color-danger-soft);
+  color: var(--color-text-primary);
 }
 
 .question-list {
-  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
   margin: 0;
   list-style: none;
 }
@@ -1089,8 +1356,18 @@ watch(() => props.resource, () => {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+  transition:
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard);
+}
+
+.question-item:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
 }
 
 .question-item__index {
@@ -1107,13 +1384,19 @@ watch(() => props.resource, () => {
 
 .question-item__content h4 {
   margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
   font-size: var(--font-size-component-title);
+}
+
+.question-item__content {
+  min-width: 0;
 }
 
 .question-item__content p {
   margin: var(--space-2) 0;
   color: var(--color-text-secondary);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .question-item__score {
@@ -1126,6 +1409,7 @@ watch(() => props.resource, () => {
 }
 
 .question-item__actions .el-button {
+  min-height: 44px;
   margin: 0;
 }
 
@@ -1134,7 +1418,8 @@ watch(() => props.resource, () => {
   margin: var(--space-6);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-card);
-  background: var(--color-surface-subtle);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-card);
 }
 
 .question-form__heading {
@@ -1147,12 +1432,20 @@ watch(() => props.resource, () => {
   margin: 0;
 }
 
+.question-form :deep(.el-textarea__inner) {
+  line-height: var(--line-height-body);
+  resize: vertical;
+}
+
 .career-data {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
   padding: var(--space-6);
+  background:
+    linear-gradient(100deg, var(--color-surface-subtle), var(--color-surface) 60%),
+    var(--color-surface);
 }
 
 .career-data p:last-child {
@@ -1164,21 +1457,60 @@ watch(() => props.resource, () => {
 .career-data__actions {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
 .career-data__actions .el-button {
+  min-height: 44px;
   margin: 0;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1199px) {
   .resource-workspace--editing {
     grid-template-columns: 1fr;
   }
 
   .resource-editor {
     position: static;
-    grid-row: 1;
+    max-height: none;
+  }
+
+  .resource-editor .resource-form {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 899px) {
+  .resource-panel__heading,
+  .resource-editor__heading,
+  .interview-detail__heading,
+  .career-data {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-panel__refresh {
+    align-self: flex-start;
+  }
+
+  .resource-editor__heading {
+    align-items: center;
+    flex-flow: row wrap;
+  }
+
+  .resource-editor__heading > div {
+    flex: 1 1 16rem;
+  }
+
+  .career-data__actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .career-data__actions .el-button {
+    width: 100%;
   }
 }
 
@@ -1191,8 +1523,25 @@ watch(() => props.resource, () => {
     flex-direction: column;
   }
 
+  .resource-panel__heading,
+  .resource-editor__heading,
+  .interview-detail__heading {
+    min-height: auto;
+    padding: var(--space-4);
+  }
+
+  .resource-panel__heading,
+  .interview-detail__heading {
+    gap: var(--space-3);
+  }
+
+  .resource-panel__refresh {
+    align-self: flex-start;
+  }
+
   .resource-item {
     grid-template-columns: 1fr;
+    gap: var(--space-4);
     padding: var(--space-4);
   }
 
@@ -1203,6 +1552,20 @@ watch(() => props.resource, () => {
 
   .resource-item__actions .el-button {
     min-height: 44px;
+  }
+
+  .resource-item__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .resource-item__metadata {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .resource-item__metadata > div + div::before {
+    content: none;
   }
 
   .resource-form,
@@ -1230,6 +1593,13 @@ watch(() => props.resource, () => {
 
   .question-item__actions {
     grid-column: 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .question-item__actions .el-button {
+    width: 100%;
   }
 
   .question-form {
@@ -1240,6 +1610,20 @@ watch(() => props.resource, () => {
 @media (prefers-reduced-motion: reduce) {
   .resource-state__loader {
     animation: none;
+  }
+
+  .resource-item,
+  .resource-editor__close,
+  .question-form__heading button,
+  .question-item {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .resource-editor,
+  .question-form {
+    box-shadow: none;
   }
 }
 </style>
