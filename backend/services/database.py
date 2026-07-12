@@ -941,7 +941,23 @@ def renew_chat_request_lease(
                     owner_token,
                 ),
             )
-            if cursor.rowcount != 1:
+            if cursor.rowcount == 0:
+                # MySQL reports changed rows by default.  An immediate renewal
+                # can therefore return zero when DATETIME rounds both lease
+                # values to the same second even though this worker still owns
+                # the request.  Confirm ownership under the same transaction
+                # before treating the no-op update as a lost lease.
+                cursor.execute(
+                    """SELECT id FROM chat_requests
+                       WHERE user_id = %s AND session_id = %s
+                         AND client_request_id = %s AND owner_token = %s
+                         AND status = 'processing'
+                       FOR UPDATE""",
+                    (user_id, session_id, client_request_id, owner_token),
+                )
+                if not cursor.fetchone():
+                    raise ChatRequestOwnershipError("Chat request lease is no longer owned")
+            elif cursor.rowcount != 1:
                 raise ChatRequestOwnershipError("Chat request lease is no longer owned")
         conn.commit()
     except Exception:

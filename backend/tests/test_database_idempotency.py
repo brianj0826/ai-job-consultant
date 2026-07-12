@@ -180,3 +180,74 @@ def test_stale_owner_release_does_not_delete_new_owner_messages(monkeypatch):
     monkeypatch.setattr(database, "get_connection", lambda: connection)
     assert database.release_chat_request(1, 2, "request-lease", "old-owner") is False
     assert not any("DELETE FROM messages" in sql for sql, _ in cursor.executions)
+
+
+class _RenewLeaseCursor:
+    def __init__(self, ownership_row, update_rowcount=0):
+        self.ownership_row = ownership_row
+        self.update_rowcount = update_rowcount
+        self._result = None
+        self.rowcount = 0
+        self.executions = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executions.append((sql, params))
+        if "UPDATE chat_requests SET lease_expires_at" in sql:
+            # MySQL returns zero changed rows when a DATETIME renewal rounds to
+            # the value already stored for the current second.
+            self.rowcount = self.update_rowcount
+            self._result = None
+        elif "SELECT id FROM chat_requests" in sql and "owner_token" in sql:
+            self._result = self.ownership_row
+
+    def fetchone(self):
+        return self._result
+
+
+def test_renew_chat_lease_accepts_noop_update_for_the_current_owner(monkeypatch):
+    cursor = _RenewLeaseCursor({"id": 4})
+    connection = _FakeConnection(cursor)
+    monkeypatch.setattr(database, "get_connection", lambda: connection)
+
+    database.renew_chat_request_lease(1, 2, "request-lease", "current-owner")
+
+    assert connection.rollbacks == 0
+    assert connection.closed
+    fallback_sql, fallback_params = next(
+        (sql, params)
+        for sql, params in cursor.executions
+        if "SELECT id FROM chat_requests" in sql
+    )
+    assert "status = 'processing'" in fallback_sql
+    assert "FOR UPDATE" in fallback_sql
+    assert fallback_params == (1, 2, "request-lease", "current-owner")
+
+
+def test_renew_chat_lease_rejects_a_missing_owner_after_noop_update(monkeypatch):
+    cursor = _RenewLeaseCursor(None)
+    connection = _FakeConnection(cursor)
+    monkeypatch.setattr(database, "get_connection", lambda: connection)
+
+    with pytest.raises(database.ChatRequestOwnershipError):
+        database.renew_chat_request_lease(1, 2, "request-lease", "stale-owner")
+
+    assert connection.rollbacks == 1
+    assert connection.closed
+
+
+def test_renew_chat_lease_fast_path_does_not_query_ownership(monkeypatch):
+    cursor = _RenewLeaseCursor(None, update_rowcount=1)
+    connection = _FakeConnection(cursor)
+    monkeypatch.setattr(database, "get_connection", lambda: connection)
+
+    database.renew_chat_request_lease(1, 2, "request-lease", "current-owner")
+
+    assert connection.rollbacks == 0
+    assert connection.closed
+    assert not any("SELECT id FROM chat_requests" in sql for sql, _ in cursor.executions)
