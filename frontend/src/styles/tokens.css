@@ -22,16 +22,21 @@
   --color-electric-blue: #3b82f6;
   --color-cyan: #19c3e6;
   --color-on-primary: #ffffff;
-  --color-success: #168f62;
-  --color-success-soft: rgb(22 143 98 / 13%);
-  --color-warning: #c57b12;
-  --color-warning-soft: rgb(197 123 18 / 14%);
-  --color-danger: #d94756;
-  --color-danger-soft: rgb(217 71 86 / 14%);
+  --color-success: #16a36a;
+  --color-success-soft: rgb(22 163 106 / 13%);
+  --color-warning: #e69a24;
+  --color-warning-soft: rgb(230 154 36 / 14%);
+  --color-danger: #ea5b65;
+  --color-danger-soft: rgb(234 91 101 / 14%);
   --color-info: #3b82f6;
   --color-info-soft: rgb(59 130 246 / 13%);
-  --color-backdrop: rgb(3 8 20 / 42%);
+  --color-backdrop: rgb(3 8 20 / 48%);
   --color-focus-ring: rgb(109 93 251 / 24%);
+  --color-aurora-violet-soft: rgb(109 93 251 / 13%);
+  --color-aurora-blue-soft: rgb(59 130 246 / 10%);
+  --color-aurora-cyan-soft: rgb(25 195 230 / 10%);
+  --color-orbit: rgb(59 130 246 / 12%);
+  --color-orbit-strong: rgb(109 93 251 / 24%);
   --aurora-gradient: linear-gradient(135deg, #6d5dfb 0%, #3b82f6 52%, #19c3e6 100%);
   --aurora-gradient-soft: linear-gradient(135deg, rgb(109 93 251 / 14%), rgb(59 130 246 / 11%) 52%, rgb(25 195 230 / 11%));
   --aurora-glow: 0 16px 44px rgb(83 87 244 / 24%);
@@ -84,6 +89,7 @@
   --shadow-dialog: 0 18px 60px rgb(2 6 23 / 18%);
   --shadow-elevated: 0 18px 60px rgb(2 6 23 / 18%);
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
+  --focus-ring-strong: 0 0 0 1px var(--color-primary), 0 0 0 4px var(--color-focus-ring);
   --glass-blur: 16px;
   --duration-control: 140ms;
   --duration-content: 220ms;
@@ -100,7 +106,7 @@
   /* Layout */
   --control-height-small: 1.875rem;
   --control-height-default: 2.375rem;
-  --control-height-large: 2.625rem;
+  --control-height-large: 2.75rem;
   --topbar-height: 4rem;
   --sidebar-width: 17.5rem;
   --sidebar-width-compact: 4.75rem;
@@ -150,6 +156,11 @@ html.dark {
   --color-info-soft: rgb(100 167 255 / 15%);
   --color-backdrop: rgb(0 0 0 / 64%);
   --color-focus-ring: rgb(139 124 255 / 32%);
+  --color-aurora-violet-soft: rgb(139 124 255 / 16%);
+  --color-aurora-blue-soft: rgb(95 156 247 / 12%);
+  --color-aurora-cyan-soft: rgb(78 216 245 / 10%);
+  --color-orbit: rgb(100 167 255 / 15%);
+  --color-orbit-strong: rgb(139 124 255 / 34%);
   --aurora-gradient: linear-gradient(135deg, #8b7cff 0%, #5f9cf7 52%, #4ed8f5 100%);
   --aurora-gradient-soft: linear-gradient(135deg, rgb(139 124 255 / 21%), rgb(95 156 247 / 15%) 52%, rgb(78 216 245 / 13%));
   --aurora-glow: 0 18px 54px rgb(96 103 255 / 30%);

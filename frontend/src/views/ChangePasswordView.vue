@@ -1,16 +1,21 @@
 <template>
-  <main class="account-page" data-testid="change-password-page">
-    <section class="account-card" aria-labelledby="change-password-title">
-      <div class="account-card__brand" aria-hidden="true">
-        <el-icon><Lock /></el-icon>
-      </div>
-      <p class="technical-label">ACCOUNT SECURITY</p>
-      <h1 id="change-password-title">修改密码</h1>
-      <p class="account-card__intro">
-        {{ mustChangePassword
-          ? '管理员已要求你设置新密码。完成修改前，其他功能将暂时不可用。'
-          : '定期更新密码有助于保护你的会话与职业资料。' }}
-      </p>
+  <main class="account-page account-page--security" data-testid="change-password-page">
+    <div class="account-page__orbit account-page__orbit--near" aria-hidden="true"></div>
+    <div class="account-page__orbit account-page__orbit--far" aria-hidden="true"></div>
+
+    <section class="account-card account-card--security" aria-labelledby="change-password-title">
+      <header class="account-card__header">
+        <div class="account-card__brand" aria-hidden="true">
+          <el-icon><Lock /></el-icon>
+        </div>
+        <p class="technical-label">ACCOUNT SECURITY</p>
+        <h1 id="change-password-title">修改密码</h1>
+        <p class="account-card__intro">
+          {{ mustChangePassword
+            ? '管理员已要求你设置新密码。完成修改前，其他功能将暂时不可用。'
+            : '定期更新密码有助于保护你的会话与职业资料。' }}
+        </p>
+      </header>
 
       <el-alert
         v-if="mustChangePassword"
