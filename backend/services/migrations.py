@@ -29,12 +29,12 @@ CAREER_SCHEMA_V1 = (
         content MEDIUMTEXT NOT NULL,
         source_name VARCHAR(512) NULL DEFAULT NULL,
         is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-        primary_user_id INT GENERATED ALWAYS AS (
-            CASE WHEN is_primary THEN user_id ELSE NULL END
+        primary_marker TINYINT GENERATED ALWAYS AS (
+            CASE WHEN is_primary THEN 1 ELSE NULL END
         ) STORED,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_career_resumes_primary_user (primary_user_id),
+        UNIQUE KEY uq_career_resumes_primary_user (user_id, primary_marker),
         KEY idx_career_resumes_user_updated (user_id, updated_at),
         CONSTRAINT fk_career_resumes_user
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

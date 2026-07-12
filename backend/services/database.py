@@ -323,7 +323,7 @@ def check_database_readiness() -> dict[str, str]:
         "schema_migrations": {"version", "name", "checksum", "applied_at"},
         "career_resumes": {
             "id", "user_id", "title", "target_role", "content", "source_name",
-            "is_primary", "primary_user_id", "created_at", "updated_at",
+            "is_primary", "primary_marker", "created_at", "updated_at",
         },
         "career_jobs": {
             "id", "user_id", "title", "company", "description", "source_url",

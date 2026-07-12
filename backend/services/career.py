@@ -52,7 +52,7 @@ def _serialize(row: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         return None
     result = dict(row)
     # Internal generated column used to enforce one primary resume per user.
-    result.pop("primary_user_id", None)
+    result.pop("primary_marker", None)
     for key, value in list(result.items()):
         if isinstance(value, Decimal):
             result[key] = float(value)

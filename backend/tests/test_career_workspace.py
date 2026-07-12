@@ -432,9 +432,10 @@ def test_schema_enforces_one_primary_resume_and_same_user_job_relations():
     applications = _career_schema_statement("career_applications")
     interviews = _career_schema_statement("career_interviews")
 
-    assert "primary_user_id" in resumes
+    assert "primary_marker" in resumes
     assert "generated always as" in resumes
-    assert re.search(r"unique key [^(]+ \(primary_user_id\)", resumes)
+    assert "case when is_primary then 1 else null end" in resumes
+    assert re.search(r"unique key [^(]+ \(user_id, primary_marker\)", resumes)
 
     assert re.search(r"unique key [^(]+ \(user_id, id\)", jobs)
     composite_job_reference = re.compile(
