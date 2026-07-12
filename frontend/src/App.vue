@@ -133,6 +133,7 @@
               @send-message="handleSendMessage"
               @kb-updated="sidebarRef?.loadDocStatus()"
               @retry-session="handleRetrySession"
+              @request-document-upload="sidebarRef?.openDocumentPicker()"
             />
           </Transition>
         </main>

@@ -181,6 +181,7 @@
           </div>
 
           <el-upload
+            ref="documentUploadRef"
             class="upload-control"
             :http-request="uploadFile"
             :show-file-list="false"
@@ -369,6 +370,7 @@ const knowledgeError = ref('')
 const hasKnowledgeSnapshot = ref(false)
 const deletingSource = ref(null)
 const uploadingDocument = ref(false)
+const documentUploadRef = ref(null)
 const creatingSession = ref(false)
 const clearingSession = ref(false)
 const renamingSession = ref(false)
@@ -591,7 +593,21 @@ const loadDocStatus = async () => {
   }
 }
 
-defineExpose({ loadDocStatus })
+const openDocumentPicker = () => {
+  if (knowledgeMutationPending.value) {
+    ElMessage.info('知识库正在更新，请稍候再试')
+    return false
+  }
+  const fileInput = documentUploadRef.value?.$el?.querySelector?.('input[type="file"]')
+  if (!fileInput || fileInput.disabled) {
+    ElMessage.info('上传控件正在准备，请稍候再试')
+    return false
+  }
+  fileInput.click()
+  return true
+}
+
+defineExpose({ loadDocStatus, openDocumentPicker })
 
 const isDark = ref(false)
 const toggleDark = () => {
