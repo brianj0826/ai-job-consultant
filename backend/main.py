@@ -84,10 +84,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # 导入路由
-from backend.routers import admin, auth, chat, documents, users, sessions, feedback, analytics, mcp
+from backend.routers import admin, auth, career, chat, documents, users, sessions, feedback, analytics, mcp
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(career.router, prefix="/api/career", tags=["career"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
@@ -104,8 +105,7 @@ def startup_check():
     if not api_key:
         logger.error("DEEPSEEK_API_KEY 未设置！AI 功能将不可用。")
     else:
-        masked = api_key[:6] + "***" + api_key[-4:]
-        logger.info(f"DEEPSEEK_API_KEY 已配置: {masked}")
+        logger.info("DEEPSEEK_API_KEY 已配置")
 
     from backend.services.auth import (
         AuthConfigurationError,
@@ -135,7 +135,12 @@ def startup_check():
             validate_database_configuration,
         )
         validate_database_configuration()
-        init_database()
+        from backend.services.migrations import run_migrations, schema_migration_lock
+        with schema_migration_lock():
+            init_database()
+            applied_migrations = run_migrations(acquire_lock=False)
+        if applied_migrations:
+            logger.info("Applied database migrations: %s", applied_migrations)
         check_database_readiness()
         retention_days = int(os.getenv("AUTH_SESSION_RETENTION_DAYS", "30"))
         retention_days = max(1, min(retention_days, 3650))
@@ -172,8 +177,9 @@ def startup_check():
         logger.warning(f"数据库连接失败: {e}")
 
     if os.getenv("RAG_DISABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        from backend.services.rag import get_collection, validate_rag_configuration
+        validate_rag_configuration()
         try:
-            from backend.services.rag import get_collection
             get_collection(0)
             logger.info("ChromaDB 向量数据库可用")
         except Exception as e:

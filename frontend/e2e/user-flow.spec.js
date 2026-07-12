@@ -32,21 +32,29 @@ test.describe('normal user browser flow', () => {
       username: localStorage.getItem('ai_username')
     }))).toEqual({ id: null, username: null })
 
-    await page.getByRole('button', { name: /岗位精准匹配/ }).click()
+    await page.getByRole('button', { name: /继续职业对话/ }).click()
     const composer = page.getByRole('textbox', { name: '向职达 AI 提问' })
     await expect(composer).toBeEnabled()
 
-    const prompt = '请给我一条契约联调建议'
+    await page.locator('input[type="file"][accept*=".pdf"]').setInputFiles({
+      name: 'resume.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4 browser contract fixture')
+    })
+    const careerTools = page.getByRole('button', { name: /求职工具/ })
+    await expect(careerTools).toBeVisible()
+    await careerTools.click()
+    const jobDescription = 'AI 产品经理，负责需求分析与数据复盘。'
+    await page.getByPlaceholder('粘贴岗位 JD').fill(jobDescription)
     const streamRequestPromise = page.waitForRequest((request) => (
       request.method() === 'POST' && request.url().endsWith('/api/chat/stream')
     ))
-    await composer.fill(prompt)
-    await page.getByRole('button', { name: '发送消息' }).click()
+    await page.getByRole('button', { name: '匹配岗位' }).click()
 
     const streamRequest = await streamRequestPromise
     expect(await streamRequest.headerValue('x-csrf-token')).toBeTruthy()
     expect(streamRequest.postDataJSON()).toEqual({
-      message: prompt,
+      message: `请根据以下岗位JD，帮我匹配我的简历：\n\n${jobDescription}`,
       session_id: 101,
       client_request_id: expect.any(String)
     })

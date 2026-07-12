@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 
@@ -113,7 +114,9 @@ def test_stream_model_failure_before_output_releases_reservation(monkeypatch):
     monkeypatch.setattr(chat_router, "_release_request", lambda *args: released.append(args))
     events = list(chat_router._stream_events([], [], 7, 3, "request-3", "owner-token"))
     assert released == [(7, 3, "request-3", "owner-token")]
-    assert "stream failed" in events[-1]
+    error = json.loads(events[-1].removeprefix("data: ").strip())["error"]
+    assert "回复生成失败" in error
+    assert "stream failed" not in error
 
 
 def test_stream_save_failure_after_partial_output_releases_reservation(monkeypatch):
@@ -132,7 +135,9 @@ def test_stream_save_failure_after_partial_output_releases_reservation(monkeypat
     monkeypatch.setattr(chat_router, "_release_request", lambda *args: released.append(args))
     events = list(chat_router._stream_events([], [], 7, 3, "request-4", "owner-token"))
     assert released == [(7, 3, "request-4", "owner-token")]
-    assert "database failed" in events[-1]
+    error = json.loads(events[-1].removeprefix("data: ").strip())["error"]
+    assert "回复保存失败" in error
+    assert "database failed" not in error
 
 
 def test_stream_client_disconnect_releases_incomplete_reservation(monkeypatch):

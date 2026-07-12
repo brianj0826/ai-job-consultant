@@ -1,9 +1,7 @@
-"""Database access helpers and backwards-compatible schema migrations.
+"""Database access helpers and backwards-compatible base-schema bootstrap.
 
-This project intentionally keeps its database layer small.  Schema changes are
-made idempotently here because the application is currently deployed without a
-migration runner.  New deployments get the complete schema and existing
-deployments are upgraded without dropping user data.
+Legacy tables are still upgraded idempotently here. New structured-domain
+changes use the versioned runner in :mod:`backend.services.migrations`.
 """
 from __future__ import annotations
 
@@ -322,16 +320,46 @@ def check_database_readiness() -> dict[str, str]:
         },
         "auth_sessions": {"id", "user_id", "token_hash", "csrf_token_hash", "expires_at"},
         "admin_audit_logs": {"id", "admin_user_id", "action"},
+        "schema_migrations": {"version", "name", "checksum", "applied_at"},
+        "career_resumes": {
+            "id", "user_id", "title", "target_role", "content", "source_name",
+            "is_primary", "primary_user_id", "created_at", "updated_at",
+        },
+        "career_jobs": {
+            "id", "user_id", "title", "company", "description", "source_url",
+            "status", "created_at", "updated_at",
+        },
+        "career_applications": {
+            "id", "user_id", "job_id", "stage", "next_action", "deadline",
+            "notes", "created_at", "updated_at",
+        },
+        "career_interviews": {
+            "id", "user_id", "job_id", "title", "status", "total_questions",
+            "current_question", "overall_score", "completed_at", "created_at", "updated_at",
+        },
+        "career_interview_questions": {
+            "id", "interview_id", "position", "question", "answer", "score",
+            "feedback", "created_at", "updated_at",
+        },
+        "career_reports": {
+            "id", "user_id", "kind", "title", "entity_type", "entity_id",
+            "summary", "payload", "created_at",
+        },
+        "career_skills": {
+            "id", "user_id", "skill", "target_level", "status", "progress",
+            "due_date", "notes", "created_at", "updated_at",
+        },
     }
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1 AS ok")
+            placeholders = ", ".join(["%s"] * len(required_columns))
             cursor.execute(
-                """SELECT TABLE_NAME, COLUMN_NAME
-                   FROM INFORMATION_SCHEMA.COLUMNS
-                   WHERE TABLE_SCHEMA = DATABASE()
-                     AND TABLE_NAME IN (%s, %s, %s, %s, %s, %s)""",
+                f"""SELECT TABLE_NAME, COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME IN ({placeholders})""",
                 tuple(required_columns),
             )
             discovered = {table: set() for table in required_columns}

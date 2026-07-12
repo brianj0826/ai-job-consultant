@@ -53,6 +53,41 @@ export const deleteSource = (source) =>
 export const fetchUrlContent = (url) =>
   api.post('/api/documents/fetch-url', { url })
 
+// Structured career workspace
+const careerResourcePath = (resource, resourceId = null) => {
+  const base = `/api/career/${resource}`
+  return resourceId === null || resourceId === undefined ? base : `${base}/${resourceId}`
+}
+
+export const getCareerResources = (resource, params = {}) =>
+  api.get(careerResourcePath(resource), { params })
+
+export const getCareerResource = (resource, resourceId) =>
+  api.get(careerResourcePath(resource, resourceId))
+
+export const createCareerResource = (resource, data) =>
+  api.post(careerResourcePath(resource), data)
+
+export const updateCareerResource = (resource, resourceId, data) =>
+  api.patch(careerResourcePath(resource, resourceId), data)
+
+export const deleteCareerResource = (resource, resourceId) =>
+  api.delete(careerResourcePath(resource, resourceId))
+
+export const createInterviewQuestion = (interviewId, data) =>
+  api.post(`/api/career/interviews/${interviewId}/questions`, data)
+
+export const updateInterviewQuestion = (interviewId, questionId, data) =>
+  api.patch(`/api/career/interviews/${interviewId}/questions/${questionId}`, data)
+
+export const deleteInterviewQuestion = (interviewId, questionId) =>
+  api.delete(`/api/career/interviews/${interviewId}/questions/${questionId}`)
+
+export const exportCareerData = () => api.get('/api/career/export')
+
+export const deleteCareerData = () =>
+  api.delete('/api/career/data', { data: { confirmation: 'DELETE' } })
+
 // Feedback
 export const submitFeedback = (msgId, feedback) =>
   api.post('/api/feedback/', { msg_id: msgId, feedback })

@@ -5,11 +5,13 @@
         <el-icon><Microphone /></el-icon>
       </div>
       <div class="interview-status__copy">
-        <span class="technical-label">LIVE PRACTICE</span>
-        <strong>模拟面试进行中</strong>
+        <span class="technical-label">{{ statusLabel }}</span>
+        <strong>{{ title || '模拟面试' }}</strong>
       </div>
       <div class="interview-progress">
-        <span class="interview-progress__label">第 {{ current }} / {{ total }} 题</span>
+        <span class="interview-progress__label">
+          {{ total > 0 ? `第 ${current} / ${total} 题` : '暂未添加题目' }}
+        </span>
         <el-progress
           class="interview-progress__bar"
           :percentage="progressPercentage"
@@ -21,13 +23,20 @@
     </div>
 
     <div class="interview-actions">
-      <el-button size="small" plain type="danger" @click="emit('end')">
+      <span v-if="score !== null && score !== undefined" class="interview-score tabular-nums">
+        {{ score }} / 100
+      </span>
+      <el-button v-if="status === 'in_progress'" size="small" plain type="danger" @click="emit('end')">
         <el-icon><VideoPause /></el-icon>
         结束面试
       </el-button>
-      <el-button size="small" type="primary" @click="emit('score')">
+      <el-button v-else size="small" type="primary" @click="emit('start')">
+        <el-icon><Microphone /></el-icon>
+        {{ status === 'completed' ? '继续训练' : '开始面试' }}
+      </el-button>
+      <el-button size="small" :type="status === 'in_progress' ? 'primary' : undefined" @click="emit('score')">
         <el-icon><DataAnalysis /></el-icon>
-        查看评分
+        查看题目与评分
       </el-button>
     </div>
   </section>
@@ -39,10 +48,20 @@ import { DataAnalysis, Microphone, VideoPause } from '@element-plus/icons-vue'
 
 const props = defineProps({
   active: { type: Boolean, default: false },
-  current: { type: Number, default: 1 },
-  total: { type: Number, default: 5 }
+  title: { type: String, default: '' },
+  status: { type: String, default: 'in_progress' },
+  current: { type: Number, default: 0 },
+  total: { type: Number, default: 0 },
+  score: { type: [Number, String], default: null }
 })
-const emit = defineEmits(['end', 'score'])
+const emit = defineEmits(['start', 'end', 'score'])
+
+const statusLabel = computed(() => ({
+  planned: 'PLANNED PRACTICE',
+  in_progress: 'LIVE PRACTICE',
+  completed: 'REVIEW READY',
+  cancelled: 'PAUSED PRACTICE'
+}[props.status] || 'INTERVIEW PRACTICE'))
 
 const progressPercentage = computed(() => {
   if (!props.total || props.total < 1) return 0
@@ -115,8 +134,21 @@ const progressPercentage = computed(() => {
 
 .interview-actions {
   display: flex;
+  align-items: center;
   flex: 0 0 auto;
   gap: var(--space-2);
+}
+
+.interview-score {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-caption);
+  font-weight: 700;
 }
 
 @media (max-width: 767px) {
