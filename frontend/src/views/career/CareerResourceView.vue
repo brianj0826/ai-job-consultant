@@ -927,7 +927,7 @@ watch(() => props.resource, () => {
   border: 1px solid var(--color-orbit-strong);
   border-radius: 50%;
   background: var(--color-surface);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: 1.25rem;
 }
 
@@ -945,7 +945,7 @@ watch(() => props.resource, () => {
 .resource-state--error > .el-icon {
   border-color: color-mix(in srgb, var(--color-danger) 32%, transparent);
   background: var(--color-danger-soft);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .resource-state--error::after {
@@ -1048,7 +1048,7 @@ watch(() => props.resource, () => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
   border-radius: var(--radius-pill);
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: var(--font-size-caption);
   font-weight: 600;
 }
@@ -1220,7 +1220,7 @@ watch(() => props.resource, () => {
 
 .resource-field > label span,
 .question-form > label span {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .resource-field :deep(.el-select) {
@@ -1271,7 +1271,7 @@ watch(() => props.resource, () => {
 }
 
 .resource-field__hint a {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: 600;
   text-underline-offset: .2em;
 }
@@ -1377,7 +1377,7 @@ watch(() => props.resource, () => {
   place-items: center;
   border-radius: var(--radius-control);
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: var(--font-size-caption);
   font-weight: 700;
 }

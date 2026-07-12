@@ -156,7 +156,7 @@ const triggerAction = (action) => emit('action', action)
   gap: var(--space-2);
   align-items: center;
   margin: 0 0 var(--space-2);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: var(--font-size-caption);
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -280,7 +280,7 @@ const triggerAction = (action) => emit('action', action)
   background:
     radial-gradient(circle at 36% 28%, color-mix(in srgb, var(--color-on-primary) 32%, transparent), transparent 35%),
     var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   box-shadow:
     inset 0 0 1.5rem color-mix(in srgb, var(--color-primary) 18%, transparent),
     0 0 2.75rem color-mix(in srgb, var(--color-primary) 18%, transparent);
@@ -452,7 +452,7 @@ const triggerAction = (action) => emit('action', action)
   border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-primary-soft) 70%, transparent);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: 1.75rem;
 }
 
@@ -547,7 +547,7 @@ const triggerAction = (action) => emit('action', action)
   place-items: center;
   border: 1px solid currentColor;
   border-radius: 50%;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: var(--font-size-body-large);
   font-weight: 700;
 }
@@ -732,7 +732,7 @@ const triggerAction = (action) => emit('action', action)
   }
 
   .task-card:hover .task-arrow {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 }
 

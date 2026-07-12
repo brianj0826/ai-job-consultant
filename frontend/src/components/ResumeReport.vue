@@ -74,12 +74,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Document, DocumentChecked, WarningFilled } from '@element-plus/icons-vue'
-import DOMPurify from 'dompurify'
 import { GaugeChart } from 'echarts/charts'
 import { init as initECharts, use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { marked } from 'marked'
 import { useReducedMotion } from '../composables/useReducedMotion'
+import { renderAccessibleMarkdown } from '../utils/markdownAccessibility'
 import InsightDrawerShell from './InsightDrawerShell.vue'
 
 use([GaugeChart, CanvasRenderer])
@@ -116,7 +115,10 @@ const displayScore = computed(() => (
 const scorePercent = computed(() => (score.value || 0) * 10)
 
 const renderedReport = computed(() => (
-  props.reportText ? DOMPurify.sanitize(marked(props.reportText)) : ''
+  renderAccessibleMarkdown(props.reportText, {
+    code: '简历报告代码块，可横向滚动',
+    table: '简历报告表格，可横向滚动'
+  })
 ))
 
 const getToken = (name) => window
@@ -259,7 +261,7 @@ defineExpose({ open, close })
   background:
     linear-gradient(var(--color-surface-elevated), var(--color-surface-elevated)) padding-box,
     var(--aurora-gradient) border-box;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   box-shadow: 0 0 1.5rem var(--color-aurora-violet-soft);
   font-size: 1.35rem;
 }
@@ -411,7 +413,7 @@ defineExpose({ open, close })
 .score-value {
   display: block;
   margin-bottom: var(--space-3);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-size: var(--font-size-metric);
   line-height: 1;
 }
@@ -448,7 +450,7 @@ defineExpose({ open, close })
 
 .score-unavailable > .el-icon {
   margin-top: .2rem;
-  color: var(--color-warning);
+  color: var(--color-warning-text);
   font-size: 1.35rem;
 }
 
@@ -464,7 +466,7 @@ defineExpose({ open, close })
 .score-unavailable__value {
   align-self: center;
   padding-left: var(--space-4);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
   font-size: clamp(2rem, 6vw, 3.5rem);
   font-weight: 300;
   line-height: 1;
@@ -564,7 +566,7 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(strong) {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .report-markdown :deep(blockquote) {
@@ -585,6 +587,7 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(pre) {
+  max-width: 100%;
   margin: var(--space-4) 0;
   padding: var(--space-4);
   overflow-x: auto;
@@ -599,8 +602,45 @@ defineExpose({ open, close })
   background: transparent;
 }
 
+.report-markdown :deep(table) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: var(--space-4) 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface-subtle);
+  white-space: nowrap;
+}
+
+.report-markdown :deep(th),
+.report-markdown :deep(td) {
+  padding: var(--space-2) var(--space-3);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.report-markdown :deep(th) {
+  background: var(--color-primary-soft);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+}
+
+.report-markdown :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.report-markdown :deep(th:last-child),
+.report-markdown :deep(td:last-child) {
+  border-right: 0;
+}
+
 .report-markdown :deep(a) {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
   text-underline-offset: .2em;
 }

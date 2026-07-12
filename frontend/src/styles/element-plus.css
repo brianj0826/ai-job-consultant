@@ -7,10 +7,10 @@
   --el-color-primary-light-8: color-mix(in srgb, var(--color-primary) 20%, white);
   --el-color-primary-light-9: var(--color-primary-soft);
   --el-color-primary-dark-2: var(--color-primary-pressed);
-  --el-color-success: var(--color-success);
-  --el-color-warning: var(--color-warning);
-  --el-color-danger: var(--color-danger);
-  --el-color-error: var(--color-danger);
+  --el-color-success: var(--color-success-text);
+  --el-color-warning: var(--color-warning-text);
+  --el-color-danger: var(--color-danger-text);
+  --el-color-error: var(--color-danger-text);
   --el-bg-color: var(--color-surface);
   --el-bg-color-page: var(--color-canvas);
   --el-bg-color-overlay: var(--color-surface-elevated);
@@ -113,10 +113,10 @@
 }
 
 .el-button--danger.is-plain {
-  --el-button-text-color: var(--color-danger);
+  --el-button-text-color: var(--color-danger-text);
   --el-button-bg-color: transparent;
   --el-button-border-color: var(--color-border);
-  --el-button-hover-text-color: var(--color-danger);
+  --el-button-hover-text-color: var(--color-danger-text);
   --el-button-hover-bg-color: var(--color-danger-soft);
   --el-button-hover-border-color: var(--color-danger);
 }
@@ -186,7 +186,7 @@
 }
 
 .el-form-item__error {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
 }
@@ -281,13 +281,13 @@
 .el-alert--warning.is-light {
   border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
   background: var(--color-warning-soft);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .el-alert--error.is-light {
   border-color: color-mix(in srgb, var(--color-danger) 42%, transparent);
   background: var(--color-danger-soft);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .el-collapse {
@@ -323,7 +323,7 @@
 .el-pagination {
   --el-pagination-bg-color: var(--color-surface-subtle);
   --el-pagination-button-bg-color: var(--color-surface-subtle);
-  --el-pagination-hover-color: var(--color-primary);
+  --el-pagination-hover-color: var(--color-primary-text);
   --el-pagination-text-color: var(--color-text-secondary);
   --el-pagination-button-disabled-bg-color: var(--color-surface-hover);
 }

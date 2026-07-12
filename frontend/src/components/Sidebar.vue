@@ -718,7 +718,7 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
   border-radius: var(--radius-control);
   background: var(--aurora-gradient-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   box-shadow: inset 0 0 18px var(--color-aurora-blue-soft);
 }
 
@@ -827,7 +827,7 @@ onUnmounted(() => {
 }
 
 .sidebar-home .el-icon {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .sidebar-home:hover {
@@ -878,7 +878,7 @@ onUnmounted(() => {
 .sidebar-career-link.router-link-active {
   border-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   box-shadow: inset 2px 0 var(--color-primary), inset 18px 0 28px var(--color-aurora-violet-soft);
 }
 
@@ -943,7 +943,7 @@ onUnmounted(() => {
 .sidebar-collapse :deep(.el-collapse-item__header.is-active) {
   border-color: color-mix(in srgb, var(--color-primary) 18%, transparent);
   background: color-mix(in srgb, var(--color-primary-soft) 62%, transparent);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .sidebar-collapse :deep(.el-collapse-item__header:focus-visible) {
@@ -1044,7 +1044,7 @@ onUnmounted(() => {
 .knowledge-warning .el-icon {
   flex: 0 0 auto;
   margin-top: 0.08rem;
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .source-list {
@@ -1256,7 +1256,7 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
   border-radius: var(--radius-pill);
   background: var(--aurora-gradient-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .sidebar-account__identity {

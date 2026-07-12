@@ -336,7 +336,7 @@ onMounted(load)
   border: 1px solid var(--color-orbit-strong);
   border-radius: 50%;
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .overview-state--error {
@@ -389,7 +389,7 @@ onMounted(load)
 
 @media (prefers-reduced-motion: reduce) {
   .overview-state__glyph :deep(.is-loading) {
-    animation-duration: 1.4s;
+    animation: none;
   }
 }
 </style>

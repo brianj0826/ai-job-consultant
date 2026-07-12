@@ -13,9 +13,10 @@
   --color-border-strong: rgb(15 23 42 / 18%);
   --color-text-primary: #0a1020;
   --color-text-secondary: #3c4a61;
-  --color-text-muted: #64748b;
+  --color-text-muted: #627187;
   --color-text-disabled: #94a3b8;
   --color-primary: #6d5dfb;
+  --color-primary-text: #5748d8;
   --color-primary-hover: #5a4be7;
   --color-primary-pressed: #493bcb;
   --color-primary-soft: rgb(109 93 251 / 14%);
@@ -23,12 +24,16 @@
   --color-cyan: #19c3e6;
   --color-on-primary: #ffffff;
   --color-success: #16a36a;
+  --color-success-text: #0d774f;
   --color-success-soft: rgb(22 163 106 / 13%);
   --color-warning: #e69a24;
+  --color-warning-text: #8f5c00;
   --color-warning-soft: rgb(230 154 36 / 14%);
   --color-danger: #ea5b65;
+  --color-danger-text: #b83743;
   --color-danger-soft: rgb(234 91 101 / 14%);
   --color-info: #3b82f6;
+  --color-info-text: #245fbd;
   --color-info-soft: rgb(59 130 246 / 13%);
   --color-backdrop: rgb(3 8 20 / 48%);
   --color-focus-ring: rgb(109 93 251 / 24%);
@@ -88,6 +93,12 @@
   --shadow-popover: 0 12px 36px rgb(2 6 23 / 16%);
   --shadow-dialog: 0 18px 60px rgb(2 6 23 / 18%);
   --shadow-elevated: 0 18px 60px rgb(2 6 23 / 18%);
+  --shadow-sidebar: 18px 0 56px rgb(2 6 23 / 6%);
+  --shadow-topbar: 0 10px 32px rgb(2 6 23 / 5%);
+  --shadow-mobile-navigation: 0 10px 30px rgb(2 6 23 / 7%);
+  --shadow-inset-highlight: inset 0 1px rgb(255 255 255 / 6%);
+  --shadow-interview-dark: inset 0 1px rgb(255 255 255 / 2%), 0 16px 38px rgb(0 0 0 / 22%);
+  --color-mask-ink: rgb(0 0 0 / 42%);
   --focus-ring: 0 0 0 3px var(--color-focus-ring);
   --focus-ring-strong: 0 0 0 1px var(--color-primary), 0 0 0 4px var(--color-focus-ring);
   --glass-blur: 16px;
@@ -140,6 +151,7 @@ html.dark {
   --color-text-muted: #91a0b7;
   --color-text-disabled: #64748b;
   --color-primary: #8b7cff;
+  --color-primary-text: #8b7cff;
   --color-primary-hover: #a093ff;
   --color-primary-pressed: #7060e8;
   --color-primary-soft: rgb(139 124 255 / 17%);
@@ -147,12 +159,16 @@ html.dark {
   --color-cyan: #4ed8f5;
   --color-on-primary: #ffffff;
   --color-success: #3bc993;
+  --color-success-text: #3bc993;
   --color-success-soft: rgb(59 201 147 / 14%);
   --color-warning: #f3b44b;
+  --color-warning-text: #f3b44b;
   --color-warning-soft: rgb(243 180 75 / 15%);
   --color-danger: #ff7d87;
+  --color-danger-text: #ff7d87;
   --color-danger-soft: rgb(255 125 135 / 15%);
   --color-info: #64a7ff;
+  --color-info-text: #64a7ff;
   --color-info-soft: rgb(100 167 255 / 15%);
   --color-backdrop: rgb(0 0 0 / 64%);
   --color-focus-ring: rgb(139 124 255 / 32%);
@@ -168,6 +184,9 @@ html.dark {
   --shadow-popover: 0 14px 42px rgb(0 0 0 / 32%);
   --shadow-dialog: 0 20px 68px rgb(0 0 0 / 42%);
   --shadow-elevated: 0 20px 68px rgb(0 0 0 / 42%);
+  --shadow-sidebar: 18px 0 60px rgb(0 0 0 / 22%);
+  --shadow-topbar: 0 12px 36px rgb(0 0 0 / 18%);
+  --shadow-mobile-navigation: 0 10px 30px rgb(0 0 0 / 18%);
 }
 
 @media (min-width: 768px) and (max-width: 1279px) {

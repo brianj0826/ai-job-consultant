@@ -55,7 +55,7 @@ button {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }

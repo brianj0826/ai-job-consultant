@@ -1,6 +1,6 @@
 <template>
   <div class="admin-shell">
-    <a class="admin-skip-link" href="#admin-main">跳到主要内容</a>
+    <a class="admin-skip-link" href="#admin-main" @click.prevent="focusMainContent">跳到主要内容</a>
     <aside class="admin-sidebar" aria-label="管理员导航">
       <div class="admin-brand">
         <span class="admin-brand__mark" aria-hidden="true"><el-icon><DataAnalysis /></el-icon></span>
@@ -44,7 +44,7 @@
         </div>
         <el-tag effect="plain" :type="isSuperAdmin ? 'danger' : 'warning'">{{ roleLabel }}</el-tag>
       </header>
-      <main id="admin-main" class="admin-main" tabindex="-1" aria-labelledby="admin-page-title">
+      <main id="admin-main" ref="mainContentRef" class="admin-main" tabindex="-1" aria-labelledby="admin-page-title">
         <RouterView />
       </main>
     </div>
@@ -52,7 +52,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   ChatDotRound,
   DataAnalysis,
@@ -68,6 +68,14 @@ import { useAuth } from '../composables/useAuth'
 const route = useRoute()
 const router = useRouter()
 const { currentUser, isSuperAdmin, logout } = useAuth()
+const mainContentRef = ref(null)
+
+const focusMainContent = () => {
+  const main = mainContentRef.value
+  if (!main) return
+  main.focus({ preventScroll: true })
+  main.scrollIntoView({ block: 'start' })
+}
 
 const navigation = [
   { to: '/admin/overview', label: '运行概览', icon: DataAnalysis },

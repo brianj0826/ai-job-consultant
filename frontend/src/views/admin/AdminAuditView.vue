@@ -215,7 +215,7 @@ onMounted(load)
 }
 
 .admin-action-code {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
   font-weight: 700;

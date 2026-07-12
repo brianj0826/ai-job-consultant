@@ -302,9 +302,7 @@ const progressAriaLabel = computed(() => (
   background:
     linear-gradient(115deg, color-mix(in srgb, var(--interview-accent) 9%, transparent), transparent 42%),
     color-mix(in srgb, var(--color-surface-elevated) 91%, var(--color-canvas-deep));
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 2%) inset,
-    0 16px 38px rgb(0 0 0 / 22%);
+  box-shadow: var(--shadow-interview-dark);
 }
 
 @media (max-width: 1099px) {

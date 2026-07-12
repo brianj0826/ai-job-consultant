@@ -104,7 +104,7 @@ const headingId = computed(() => `career-${props.title.replace(/\s+/g, '-').toLo
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
   font-weight: 700;
@@ -193,7 +193,7 @@ const headingId = computed(() => `career-${props.title.replace(/\s+/g, '-').toLo
 .career-layout__navigation-link.router-link-active {
   border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .career-layout__navigation-link.router-link-active::after {
@@ -227,7 +227,7 @@ const headingId = computed(() => `career-${props.title.replace(/\s+/g, '-').toLo
 }
 
 .career-layout__navigation-link.router-link-active .career-layout__navigation-index {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .career-layout__navigation-link > span:last-child {

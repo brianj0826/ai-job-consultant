@@ -51,7 +51,7 @@
             :rules="rules"
             class="auth-form"
             label-position="top"
-            @keyup.enter="handleSubmit"
+            @submit.prevent="handleSubmit"
           >
             <el-form-item label="用户名" prop="username">
               <el-input
@@ -105,9 +105,9 @@
               class="submit-btn"
               :disabled="retryAfterSeconds > 0"
               :loading="loading"
+              native-type="submit"
               size="large"
               type="primary"
-              @click="handleSubmit"
             >
               {{ retryAfterSeconds > 0
                 ? `${retryAfterSeconds} 秒后重试`
@@ -419,7 +419,7 @@ onBeforeUnmount(() => {
 }
 
 .brand-kicker {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-family: var(--font-mono);
 }
 
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
 }
 
 .form-kicker {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-family: var(--font-mono);
 }
 
@@ -595,7 +595,7 @@ onBeforeUnmount(() => {
 
 .submit-error {
   margin: calc(var(--space-2) * -1) 0 var(--space-3);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
 }
@@ -697,6 +697,9 @@ onBeforeUnmount(() => {
 }
 
 .mode-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   margin-left: var(--space-1);
   font-size: inherit;
   font-weight: 650;
@@ -715,7 +718,7 @@ onBeforeUnmount(() => {
 .form-note .el-icon {
   flex: 0 0 auto;
   margin-top: 0.08rem;
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 @keyframes panel-arrive {

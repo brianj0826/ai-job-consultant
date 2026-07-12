@@ -11,7 +11,7 @@
 
   <Transition v-else name="auth-shell" mode="out-in" appear>
     <div :key="workspaceIdentityKey" class="app-shell">
-      <a class="skip-link" href="#main-content">跳至主要内容</a>
+      <a class="skip-link" href="#main-content" @click.prevent="focusMainContent">跳至主要内容</a>
 
       <nav
         v-if="isTabletLayout"
@@ -108,7 +108,7 @@
           @toggle-navigation="toggleNavigation"
         />
 
-        <main id="main-content" class="app-shell__main" tabindex="-1">
+        <main id="main-content" ref="mainContentRef" class="app-shell__main" tabindex="-1">
           <RouterView v-if="isCareerWorkspace" v-slot="{ Component }">
             <Transition name="workspace-view" mode="out-in">
               <component :is="Component" :key="route.name" />
@@ -184,6 +184,14 @@ const sidebarRef = ref(null)
 const navigationRef = ref(null)
 const topbarRef = ref(null)
 const railNavigationButtonRef = ref(null)
+const mainContentRef = ref(null)
+
+const focusMainContent = () => {
+  const main = mainContentRef.value
+  if (!main) return
+  main.focus({ preventScroll: true })
+  main.scrollIntoView({ block: 'start' })
+}
 
 const showDashboard = ref(true)
 const {
@@ -705,7 +713,7 @@ onUnmounted(() => {
     overflow: hidden;
     border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
     background: var(--color-primary-soft);
-    color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 
   .app-shell__rail-brand::after {
@@ -730,7 +738,7 @@ onUnmounted(() => {
   .app-shell__rail-brand:hover {
     border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
     background: var(--color-primary-soft);
-    color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 
   .app-shell__rail-button--active {

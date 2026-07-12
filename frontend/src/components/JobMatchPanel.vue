@@ -124,8 +124,7 @@ import {
   Document,
   WarningFilled
 } from '@element-plus/icons-vue'
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
+import { renderAccessibleMarkdown } from '../utils/markdownAccessibility'
 import InsightDrawerShell from './InsightDrawerShell.vue'
 
 const props = defineProps({
@@ -207,7 +206,10 @@ const extractSkills = (sectionName, stopNames) => {
 const matchedSkills = computed(() => extractSkills('匹配的技能', ['缺失的技能', '加分项', '建议']))
 const missingSkills = computed(() => extractSkills('缺失的技能', ['加分项', '建议']))
 const renderedReport = computed(() => (
-  props.reportText ? DOMPurify.sanitize(marked(props.reportText)) : ''
+  renderAccessibleMarkdown(props.reportText, {
+    code: '岗位匹配报告代码块，可横向滚动',
+    table: '岗位匹配报告表格，可横向滚动'
+  })
 ))
 
 const open = () => {
@@ -425,17 +427,17 @@ defineExpose({ open, close })
 
 .match-status--success {
   background: var(--color-success-soft);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .match-status--warning {
   background: var(--color-warning-soft);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .match-status--danger {
   background: var(--color-danger-soft);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 .score-unavailable {
@@ -461,7 +463,7 @@ defineExpose({ open, close })
   border: 1px solid color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
   border-radius: var(--radius-control);
   background: var(--color-warning-soft);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
   font-size: 1.25rem;
 }
 
@@ -529,7 +531,7 @@ defineExpose({ open, close })
   background:
     linear-gradient(145deg, var(--color-success-soft), transparent 76%),
     var(--color-surface-subtle);
-  color: var(--color-success);
+  color: var(--color-success-text);
 }
 
 .skill-card--missing {
@@ -537,7 +539,7 @@ defineExpose({ open, close })
   background:
     linear-gradient(145deg, var(--color-warning-soft), transparent 76%),
     var(--color-surface-subtle);
-  color: var(--color-warning);
+  color: var(--color-warning-text);
 }
 
 .skill-card__heading {
@@ -581,13 +583,13 @@ defineExpose({ open, close })
 .skill-tag--matched {
   --el-tag-bg-color: var(--color-success-soft);
   --el-tag-border-color: var(--color-success);
-  --el-tag-text-color: var(--color-success);
+  --el-tag-text-color: var(--color-success-text);
 }
 
 .skill-tag--missing {
   --el-tag-bg-color: var(--color-warning-soft);
   --el-tag-border-color: var(--color-warning);
-  --el-tag-text-color: var(--color-warning);
+  --el-tag-text-color: var(--color-warning-text);
 }
 
 .skill-empty {
@@ -640,7 +642,7 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(strong) {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .report-markdown :deep(a) {
@@ -665,6 +667,7 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(pre) {
+  max-width: 100%;
   margin: var(--space-4) 0;
   padding: var(--space-4);
   overflow-x: auto;
@@ -677,6 +680,43 @@ defineExpose({ open, close })
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.report-markdown :deep(table) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: var(--space-4) 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface-subtle);
+  white-space: nowrap;
+}
+
+.report-markdown :deep(th),
+.report-markdown :deep(td) {
+  padding: var(--space-2) var(--space-3);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.report-markdown :deep(th) {
+  background: var(--color-primary-soft);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+}
+
+.report-markdown :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.report-markdown :deep(th:last-child),
+.report-markdown :deep(td:last-child) {
+  border-right: 0;
 }
 
 @media (max-width: 560px) {

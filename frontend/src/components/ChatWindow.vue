@@ -790,7 +790,7 @@ onBeforeUnmount(() => {
 .state-icon {
   flex: 0 0 auto;
   margin-top: .1rem;
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: 1.1rem;
 }
 
@@ -815,7 +815,7 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border));
   background: var(--color-surface-glass);
   box-shadow: var(--shadow-popover), 0 0 24px var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   -webkit-backdrop-filter: blur(var(--glass-blur));
   backdrop-filter: blur(var(--glass-blur));
   transform: translateX(50%);

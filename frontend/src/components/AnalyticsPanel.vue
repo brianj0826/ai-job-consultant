@@ -411,7 +411,7 @@ defineExpose({ open, close })
 }
 
 .feedback-summary strong {
-  color: var(--color-success);
+  color: var(--color-success-text);
   font-size: var(--font-size-metric);
   font-weight: 580;
   line-height: 1;
@@ -449,8 +449,8 @@ defineExpose({ open, close })
   gap: var(--space-2);
 }
 
-.feedback-metric__label--positive .el-icon { color: var(--color-success); }
-.feedback-metric__label--negative .el-icon { color: var(--color-danger); }
+.feedback-metric__label--positive .el-icon { color: var(--color-success-text); }
+.feedback-metric__label--negative .el-icon { color: var(--color-danger-text); }
 
 .feedback-metric :deep(.el-progress-bar__outer) {
   background: var(--color-surface-hover);
@@ -508,7 +508,7 @@ defineExpose({ open, close })
   border: 2px solid var(--color-primary);
   border-radius: 50%;
   background: var(--color-surface-elevated);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-family: var(--font-mono);
   font-style: normal;
   line-height: 1;
@@ -631,7 +631,7 @@ defineExpose({ open, close })
   font-size: 1.65rem;
 }
 
-.panel-state--error .panel-state__icon { color: var(--color-danger); }
+.panel-state--error .panel-state__icon { color: var(--color-danger-text); }
 
 .panel-state h3 {
   margin: 0 0 var(--space-2);

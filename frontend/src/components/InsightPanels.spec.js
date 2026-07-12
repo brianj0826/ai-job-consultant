@@ -58,4 +58,30 @@ describe('insight panel parsing', () => {
     expect(wrapper.get('.skill-card--missing').text()).not.toContain('云原生项目经验')
     expect(wrapper.get('#drawer-title').text()).toBe('岗位匹配分析')
   })
+
+  it('labels report code and table scroll regions for keyboard navigation', () => {
+    const markdownDetails = [
+      '',
+      '```text',
+      'a very long report line',
+      '```',
+      '',
+      '| 项目 | 结果 |',
+      '| --- | --- |',
+      '| A | B |'
+    ].join('\n')
+    const resume = mount(ResumeReport, {
+      props: { reportText: `综合评分：8/10 分\n${markdownDetails}` },
+      global: { stubs }
+    })
+    const job = mount(JobMatchPanel, {
+      props: { reportText: `匹配度：82%\n${markdownDetails}` },
+      global: { stubs }
+    })
+
+    expect(resume.get('.report-markdown pre').attributes('aria-label')).toBe('简历报告代码块，可横向滚动')
+    expect(resume.get('.report-markdown table').attributes('tabindex')).toBe('0')
+    expect(job.get('.report-markdown pre').attributes('aria-label')).toBe('岗位匹配报告代码块，可横向滚动')
+    expect(job.get('.report-markdown table').attributes('tabindex')).toBe('0')
+  })
 })

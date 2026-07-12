@@ -128,8 +128,10 @@ import {
   RefreshRight,
   WarningFilled
 } from '@element-plus/icons-vue'
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
+import {
+  renderAccessibleHtml,
+  renderAccessibleMarkdown
+} from '../utils/markdownAccessibility'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -155,13 +157,13 @@ const renderCompletedMarkdown = (text) => {
   const source = cleanSourceMarkers(text)
   if (source === cachedSource) return cachedHtml
   cachedSource = source
-  cachedHtml = source ? DOMPurify.sanitize(marked(source)) : ''
+  cachedHtml = renderAccessibleMarkdown(source)
   return cachedHtml
 }
 
 const renderedContent = computed(() => (
   props.streaming || props.interrupted
-    ? props.renderedHtml
+    ? renderAccessibleHtml(props.renderedHtml)
     : renderCompletedMarkdown(props.message.content)
 ))
 
@@ -403,6 +405,7 @@ const formattedTimestamp = computed(() => {
 }
 
 .message-content :deep(pre) {
+  max-width: 100%;
   padding: var(--space-4);
   overflow-x: auto;
   border: 1px solid var(--color-border);
@@ -543,7 +546,7 @@ const formattedTimestamp = computed(() => {
 
 .feedback-button {
   --el-button-text-color: var(--color-text-muted);
-  --el-button-hover-text-color: var(--color-success);
+  --el-button-hover-text-color: var(--color-success-text);
   --el-button-hover-bg-color: var(--color-success-soft);
   min-width: auto;
   min-height: 2.75rem;
@@ -553,17 +556,17 @@ const formattedTimestamp = computed(() => {
 }
 
 .feedback-button--negative {
-  --el-button-hover-text-color: var(--color-danger);
+  --el-button-hover-text-color: var(--color-danger-text);
   --el-button-hover-bg-color: var(--color-danger-soft);
 }
 
 .feedback-button--active {
-  --el-button-text-color: var(--color-success);
+  --el-button-text-color: var(--color-success-text);
   --el-button-bg-color: var(--color-success-soft);
 }
 
 .feedback-button--negative.feedback-button--active {
-  --el-button-text-color: var(--color-danger);
+  --el-button-text-color: var(--color-danger-text);
   --el-button-bg-color: var(--color-danger-soft);
 }
 
@@ -608,7 +611,7 @@ const formattedTimestamp = computed(() => {
 .inline-interruption__icon {
   flex: 0 0 auto;
   margin-top: .15rem;
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: 1.05rem;
 }
 

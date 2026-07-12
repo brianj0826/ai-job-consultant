@@ -113,7 +113,7 @@ defineExpose({
 .app-topbar__nav-toggle:hover {
   border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .app-topbar__nav-toggle:focus-visible {
@@ -200,7 +200,7 @@ defineExpose({
   border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
   border-radius: var(--radius-pill);
   background: var(--color-primary-soft);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .app-topbar__account-copy {
