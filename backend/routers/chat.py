@@ -5,6 +5,7 @@ from starlette.background import BackgroundTask
 from typing import Optional
 import sys
 import json
+import logging
 import time
 sys.path.append("..")
 from backend.services.database import (
@@ -26,6 +27,7 @@ from backend.services.access import current_user_id, require_owned_session
 from backend.services.auth import require_business_csrf, require_current_user
 
 router = APIRouter()
+logger = logging.getLogger("aiagent.chat")
 
 class ChatRequest(BaseModel):
     message: str
@@ -284,6 +286,8 @@ def _stream_events(
     owner_token: Optional[str],
 ):
     full_text = ""
+    buffered_tokens = []
+    output_started = False
     renewal_interval = max(5.0, chat_request_lease_seconds() / 3)
     renew_at = time.monotonic() + renewal_interval
     try:
@@ -292,6 +296,24 @@ def _stream_events(
                 _renew_request(user_id, session_id, client_request_id, owner_token)
                 renew_at = time.monotonic() + renewal_interval
             full_text += token
+            buffered_tokens.append(token)
+
+        # Do not emit model tokens until the complete response has passed the
+        # same output moderation applied by the non-streaming endpoint.  The
+        # wire format remains token SSE events followed by the existing done
+        # event, so clients do not need a protocol change.
+        is_safe, reason = moderate_text(full_text, user_id)
+        if is_safe:
+            approved_text = full_text
+            approved_tokens = buffered_tokens
+        else:
+            approved_text = (
+                f"[系统提示] 回复内容已被安全策略拦截（{reason}），请重新提问。"
+            )
+            approved_tokens = [approved_text]
+
+        for token in approved_tokens:
+            output_started = True
             yield f"data: {json.dumps({'token': token})}\n\n"
 
         message_id = _complete_request(
@@ -299,30 +321,53 @@ def _stream_events(
             session_id,
             client_request_id,
             owner_token,
-            full_text,
+            approved_text,
         )
         yield f"data: {json.dumps({'done': True, 'msg_id': message_id, 'sources': sources_data})}\n\n"
     except GeneratorExit:
         _release_request(user_id, session_id, client_request_id, owner_token)
         raise
     except Exception as error:
-        if full_text:
+        logger.exception("Chat stream failed for user %s session %s", user_id, session_id)
+        if output_started:
+            _release_request(user_id, session_id, client_request_id, owner_token)
+            yield f"data: {json.dumps({'error': '回复保存失败，请稍后重试'})}\n\n"
+        elif full_text:
+            # An upstream interruption may leave a useful partial response.
+            # Audit that complete partial value before either storing or
+            # releasing it to the client.
+            is_safe, reason = moderate_text(full_text, user_id)
+            if is_safe:
+                approved_text = full_text
+                approved_tokens = buffered_tokens
+            else:
+                approved_text = (
+                    f"[系统提示] 回复内容已被安全策略拦截（{reason}），请重新提问。"
+                )
+                approved_tokens = [approved_text]
             try:
                 message_id = _complete_request(
                     user_id,
                     session_id,
                     client_request_id,
                     owner_token,
-                    full_text,
+                    approved_text,
                 )
             except Exception as save_error:
+                logger.exception(
+                    "Partial chat response could not be saved for user %s session %s",
+                    user_id,
+                    session_id,
+                )
                 _release_request(user_id, session_id, client_request_id, owner_token)
-                yield f"data: {json.dumps({'error': str(save_error)})}\n\n"
+                yield f"data: {json.dumps({'error': '回复保存失败，请稍后重试'})}\n\n"
             else:
+                for token in approved_tokens:
+                    yield f"data: {json.dumps({'token': token})}\n\n"
                 yield f"data: {json.dumps({'done': True, 'msg_id': message_id, 'sources': sources_data})}\n\n"
         else:
             _release_request(user_id, session_id, client_request_id, owner_token)
-            yield f"data: {json.dumps({'error': str(error)})}\n\n"
+            yield f"data: {json.dumps({'error': '回复生成失败，请稍后重试'})}\n\n"
 
 @router.post("/", dependencies=[Depends(require_business_csrf)])
 def chat(
@@ -422,7 +467,13 @@ def chat_stream(
     )
     if replay:
         def replay_completed():
-            yield f"data: {json.dumps({'token': replay['content']})}\n\n"
+            replay_text = replay["content"]
+            is_safe, reason = moderate_text(replay_text, user_id)
+            if not is_safe:
+                replay_text = (
+                    f"[系统提示] 回复内容已被安全策略拦截（{reason}），请重新提问。"
+                )
+            yield f"data: {json.dumps({'token': replay_text})}\n\n"
             yield f"data: {json.dumps({'done': True, 'msg_id': replay['id'], 'sources': [], 'replayed': True})}\n\n"
 
         return StreamingResponse(replay_completed(), media_type="text/event-stream")

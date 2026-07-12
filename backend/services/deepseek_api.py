@@ -74,7 +74,13 @@ def get_ai_response_with_tools(messages, tools=None, max_retries=2, timeout=30):
         except Exception as e:
             if attempt < max_retries:
                 wait = 2 ** attempt
-                print(f"⚠️ 工具调用请求失败 (尝试 {attempt+1}/{max_retries+1})，{wait}秒后重试... 错误: {e}")
+                logger.warning(
+                    "工具调用请求失败 (尝试 %s/%s)，%s 秒后重试: %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    wait,
+                    e,
+                )
                 time.sleep(wait)
             else:
                 logger.error(f"所有重试均失败: {e}")
@@ -119,10 +125,3 @@ def get_ai_response_stream(messages):
                 yield content
         except (json.JSONDecodeError, KeyError, IndexError):
             continue
-
-
-# --- 测试代码 ---
-if __name__ == "__main__":
-    test_messages = [{"role": "user", "content": "你好，请介绍一下你自己。"}]
-    reply = get_ai_response(test_messages)
-    print(f"AI回复: {reply}")

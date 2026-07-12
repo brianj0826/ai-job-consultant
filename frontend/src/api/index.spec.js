@@ -88,4 +88,40 @@ describe('frontend API contract', () => {
     api.resetAdminUserPassword(9)
     expect(request.post).toHaveBeenCalledWith('/api/admin/users/9/reset-password')
   })
+
+  it('uses the authenticated career workspace contract without user_id', () => {
+    api.getCareerResources('resumes', { status: 'active' })
+    api.getCareerResource('interviews', 3)
+    api.createCareerResource('jobs', { title: '产品经理' })
+    api.updateCareerResource('skills', 7, { progress: 60 })
+    api.deleteCareerResource('reports', 9)
+    api.createInterviewQuestion(3, { question: '请介绍一个项目' })
+    api.updateInterviewQuestion(3, 11, { score: 90 })
+    api.deleteInterviewQuestion(3, 11)
+
+    expect(request.get).toHaveBeenCalledWith('/api/career/resumes', {
+      params: { status: 'active' }
+    })
+    expect(request.get).toHaveBeenCalledWith('/api/career/interviews/3')
+    expect(request.post).toHaveBeenCalledWith('/api/career/jobs', { title: '产品经理' })
+    expect(request.patch).toHaveBeenCalledWith('/api/career/skills/7', { progress: 60 })
+    expect(request.delete).toHaveBeenCalledWith('/api/career/reports/9')
+    expect(request.post).toHaveBeenCalledWith('/api/career/interviews/3/questions', {
+      question: '请介绍一个项目'
+    })
+    expect(request.patch).toHaveBeenCalledWith('/api/career/interviews/3/questions/11', {
+      score: 90
+    })
+    expect(request.delete).toHaveBeenCalledWith('/api/career/interviews/3/questions/11')
+  })
+
+  it('requires the server-side confirmation contract when clearing career data', () => {
+    api.exportCareerData()
+    api.deleteCareerData()
+
+    expect(request.get).toHaveBeenCalledWith('/api/career/export')
+    expect(request.delete).toHaveBeenCalledWith('/api/career/data', {
+      data: { confirmation: 'DELETE' }
+    })
+  })
 })

@@ -41,7 +41,7 @@ const openAuthenticatedChat = async (page) => {
   await authenticateWithMock(page)
   await page.goto('/')
   await expect(page.getByRole('heading', { name: '职业工作台' })).toBeVisible()
-  await page.getByRole('button', { name: /岗位精准匹配/ }).click()
+  await page.getByRole('button', { name: /继续职业对话/ }).click()
   await expect(page.getByRole('heading', { name: '职业智能对话' })).toBeVisible()
   await expect.poll(() => page.locator('.msg-row--assistant').count()).toBeGreaterThanOrEqual(25)
   await expect(page.locator('.streaming-status')).toBeHidden()
@@ -114,7 +114,7 @@ test.describe('responsive motion flows', () => {
         await expect(navigation).toHaveAttribute('aria-hidden', 'true')
       }
 
-      await page.getByRole('button', { name: /岗位精准匹配/ }).click()
+      await page.getByRole('button', { name: /继续职业对话/ }).click()
       await expect(page.getByRole('heading', { name: '职业智能对话' })).toBeVisible()
       await expectNoHorizontalOverflow(page)
     })

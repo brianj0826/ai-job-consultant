@@ -26,6 +26,84 @@ const routes = [
     meta: { requiresAuth: true, layout: 'workspace' }
   },
   {
+    path: '/resumes',
+    name: 'career-resumes',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'resumes' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '简历中心',
+      context: '管理面向不同目标岗位的简历版本'
+    }
+  },
+  {
+    path: '/jobs',
+    name: 'career-jobs',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'jobs' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '岗位库',
+      context: '保存目标岗位与完整 JD'
+    }
+  },
+  {
+    path: '/applications',
+    name: 'career-applications',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'applications' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '投递工作台',
+      context: '跟进阶段、截止日期和下一步行动'
+    }
+  },
+  {
+    path: '/interviews',
+    name: 'career-interviews',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'interviews' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '面试中心',
+      context: '组织题目、回答、评分与复盘'
+    }
+  },
+  {
+    path: '/reports',
+    name: 'career-reports',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'reports' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '报告中心',
+      context: '查看持久化的结构化分析与复盘'
+    }
+  },
+  {
+    path: '/profile/skills',
+    name: 'career-skills',
+    component: () => import('../views/career/CareerResourceView.vue'),
+    props: { resource: 'skills' },
+    meta: {
+      requiresAuth: true,
+      layout: 'workspace',
+      workspaceSection: 'career',
+      title: '技能计划',
+      context: '把岗位差距转化为可推进的成长任务'
+    }
+  },
+  {
     path: '/change-password',
     name: 'change-password',
     component: () => import('../views/ChangePasswordView.vue'),

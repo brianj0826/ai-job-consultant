@@ -31,7 +31,7 @@
         <div class="app-shell__rail-actions">
           <button
             class="app-shell__rail-button"
-            :class="{ 'app-shell__rail-button--active': showDashboard }"
+            :class="{ 'app-shell__rail-button--active': showDashboard && !isCareerWorkspace }"
             type="button"
             aria-label="职业工作台"
             title="职业工作台"
@@ -109,7 +109,12 @@
         />
 
         <main id="main-content" class="app-shell__main" tabindex="-1">
-          <Transition name="workspace-view" mode="out-in">
+          <RouterView v-if="isCareerWorkspace" v-slot="{ Component }">
+            <Transition name="workspace-view" mode="out-in">
+              <component :is="Component" :key="route.name" />
+            </Transition>
+          </RouterView>
+          <Transition v-else name="workspace-view" mode="out-in">
             <Dashboard
               v-if="showDashboard"
               key="dashboard"
@@ -211,9 +216,14 @@ let sessionRequestId = 0
 
 const isOverlayNavigation = computed(() => viewportWidth.value < 1280)
 const isTabletLayout = computed(() => viewportWidth.value >= 768 && viewportWidth.value < 1280)
-const activeViewKey = computed(() => showDashboard.value ? 'dashboard' : 'chat')
-const pageTitle = computed(() => showDashboard.value ? '职业工作台' : '职业智能对话')
-const pageContext = computed(() => showDashboard.value ? 'Career Intelligence Console' : '基于你的会话与知识库提供建议')
+const isCareerWorkspace = computed(() => route.meta.workspaceSection === 'career')
+const activeViewKey = computed(() => isCareerWorkspace.value
+  ? String(route.name)
+  : (showDashboard.value ? 'dashboard' : 'chat'))
+const pageTitle = computed(() => route.meta.title
+  || (showDashboard.value ? '职业工作台' : '职业智能对话'))
+const pageContext = computed(() => route.meta.context
+  || (showDashboard.value ? 'Career Intelligence Console' : '基于你的会话与知识库提供建议'))
 
 const updateViewport = () => {
   viewportWidth.value = window.innerWidth
@@ -286,11 +296,12 @@ const handleKeydown = (event) => {
   closeNavigation({ restoreFocus: true })
 }
 
-const handleDashboardAction = (intent) => {
-  showDashboard.value = false
-  lastQuickIntent.value = intent
-  quickChatText.value = `${intent} `
-  nextTick(() => { quickChatText.value = '' })
+const handleDashboardAction = (routeName) => {
+  if (routeName === 'chat') {
+    showDashboard.value = false
+    return
+  }
+  void router.push({ name: routeName })
 }
 
 const handleLoginSuccess = async (user) => {
@@ -377,7 +388,10 @@ const loadSessionMessages = async (sessionId, { navigate = true } = {}) => {
   messages.value = []
   sessionError.value = ''
   sessionStatus.value = 'loading'
-  if (navigate) showDashboard.value = false
+  if (navigate) {
+    showDashboard.value = false
+    if (route.name !== 'workspace') void router.push({ name: 'workspace' })
+  }
   try {
     const res = await getMessages(sessionId)
     if (requestId !== sessionRequestId || currentSessionId.value !== sessionId) return
@@ -443,6 +457,7 @@ const handleSendMessage = (newMessages) => {
 }
 
 const handleQuickChat = (text) => {
+  if (route.name !== 'workspace') void router.push({ name: 'workspace' })
   showDashboard.value = false
   lastQuickIntent.value = text
   quickChatText.value = `${text} `
@@ -482,7 +497,12 @@ const handleShowAnalytics = () => {
 const handleGoHome = () => {
   closeNavigation({ restoreFocus: true })
   showDashboard.value = true
+  if (route.name !== 'workspace') void router.push({ name: 'workspace' })
 }
+
+watch(() => route.fullPath, () => {
+  if (isCareerWorkspace.value) closeNavigation({ restoreFocus: true })
+})
 
 watch(lastAIResponse, (val) => {
   if (!val || !lastQuickIntent.value) return

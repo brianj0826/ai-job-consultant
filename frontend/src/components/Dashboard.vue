@@ -18,10 +18,14 @@
             先梳理已有经历的表达、重点与可改进处，再把下一次投递和面试准备落到具体行动上。
           </p>
           <div class="spotlight-footer">
-            <el-button class="spotlight-action" type="primary" @click="triggerAction('分析简历')">
+            <el-button class="spotlight-action" type="primary" @click="triggerAction('career-resumes')">
               <el-icon aria-hidden="true"><DocumentChecked /></el-icon>
               分析简历
               <el-icon aria-hidden="true"><ArrowRight /></el-icon>
+            </el-button>
+            <el-button class="spotlight-chat" @click="triggerAction('chat')">
+              <el-icon aria-hidden="true"><ChatDotRound /></el-icon>
+              继续职业对话
             </el-button>
             <span>上传简历后即可开始分析。</span>
           </div>
@@ -39,7 +43,7 @@
           <p>选择你的下一项训练</p>
         </div>
 
-        <button class="task-card" type="button" @click="triggerAction('匹配')">
+        <button class="task-card" type="button" @click="triggerAction('career-jobs')">
           <span class="task-icon" aria-hidden="true"><el-icon><Aim /></el-icon></span>
           <span class="task-copy">
             <strong>岗位精准匹配</strong>
@@ -48,7 +52,7 @@
           <el-icon class="task-arrow" aria-hidden="true"><ArrowRight /></el-icon>
         </button>
 
-        <button class="task-card" type="button" @click="triggerAction('模拟面试')">
+        <button class="task-card" type="button" @click="triggerAction('career-interviews')">
           <span class="task-icon" aria-hidden="true"><el-icon><Microphone /></el-icon></span>
           <span class="task-copy">
             <strong>模拟面试训练</strong>
@@ -99,6 +103,7 @@
 import {
   Aim,
   ArrowRight,
+  ChatDotRound,
   DocumentChecked,
   Lightning,
   Microphone
@@ -262,6 +267,15 @@ const triggerAction = (action) => emit('action', action)
 
 .spotlight-action .el-icon:last-child {
   margin-left: var(--space-1);
+}
+
+.spotlight-chat {
+  --el-button-bg-color: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  --el-button-border-color: var(--color-border-strong);
+  --el-button-text-color: var(--color-text-primary);
+
+  min-height: 2.75rem;
+  font-weight: 600;
 }
 
 .spotlight-footer > span {

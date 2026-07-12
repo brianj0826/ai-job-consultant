@@ -26,6 +26,21 @@
         <span>职业工作台</span>
       </button>
 
+      <div class="sidebar-career-navigation" aria-label="结构化求职工具">
+        <RouterLink
+          v-for="item in careerNavigation"
+          :key="item.routeName"
+          class="sidebar-career-link"
+          :to="{ name: item.routeName }"
+          @click="$emit('close-navigation')"
+        >
+          <el-icon :size="17" aria-hidden="true">
+            <component :is="careerIcons[item.resource]" />
+          </el-icon>
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </div>
+
       <el-collapse v-model="activePanels" class="sidebar-collapse">
         <el-collapse-item name="chat">
           <template #title>
@@ -207,15 +222,15 @@
             <span :title="resumeSource.title || resumeSource.source">{{ resumeSource.title || resumeSource.source }}</span>
           </div>
 
-          <div class="button-grid">
-            <el-button type="primary" size="small" :disabled="!resumeSource" @click="$emit('quick-chat', '帮我分析一下我的简历')">
+          <div class="career-route-grid">
+            <RouterLink :to="{ name: 'career-resumes' }" @click="$emit('close-navigation')">
               <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
-              <span>分析简历</span>
-            </el-button>
-            <el-button type="success" size="small" @click="$emit('quick-chat', '请帮我模拟面试，先问我的目标岗位，然后逐题提问并点评')">
+              <span>管理简历</span>
+            </RouterLink>
+            <RouterLink :to="{ name: 'career-interviews' }" @click="$emit('close-navigation')">
               <el-icon :size="15" aria-hidden="true"><ChatLineRound /></el-icon>
-              <span>模拟面试</span>
-            </el-button>
+              <span>面试中心</span>
+            </RouterLink>
           </div>
 
           <div class="jd-input-area">
@@ -330,6 +345,16 @@ import {
   uploadPDF
 } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { careerNavigation } from '../career/resources'
+
+const careerIcons = {
+  resumes: Document,
+  jobs: Briefcase,
+  applications: Aim,
+  interviews: ChatLineRound,
+  reports: DataAnalysis,
+  skills: CircleCheck
+}
 
 const props = defineProps({
   currentUsername: { type: String, default: '' },
@@ -777,6 +802,78 @@ onUnmounted(() => {
 .sidebar-home:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.sidebar-career-navigation {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-career-link {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: 550;
+  text-decoration: none;
+  transition:
+    border-color var(--duration-control) var(--ease-standard),
+    background-color var(--duration-control) var(--ease-standard),
+    color var(--duration-control) var(--ease-standard);
+}
+
+.sidebar-career-link:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.sidebar-career-link.router-link-active {
+  border-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  box-shadow: inset 2px 0 var(--color-primary);
+}
+
+.sidebar-career-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.career-route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.career-route-grid a {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.career-route-grid a:hover,
+.career-route-grid a:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .sidebar-collapse {

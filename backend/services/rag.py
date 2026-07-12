@@ -11,7 +11,9 @@ os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
-_collection_cache = {}
+CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH', './chroma_db')
+_chroma_client = None
+_embedding_function = None
 
 
 def rag_disabled() -> bool:
@@ -24,18 +26,51 @@ DEFAULT_CHUNK_OVERLAP = int(os.getenv('RAG_CHUNK_OVERLAP', '100'))
 # 支持的文件类型
 ALLOWED_EXTENSIONS = {'.pdf', '.txt', '.md', '.docx'}
 
-def get_collection(user_id: int):
-    if user_id not in _collection_cache:
-        logger.info(f"为用户 {user_id} 创建新集合")
-        client = chromadb.PersistentClient(path="./chroma_db")
-        collection_name = f"kb_user_{user_id}"
-        _collection_cache[user_id] = client.get_or_create_collection(
-            name=collection_name,
-            embedding_function=embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name=EMBEDDING_MODEL_NAME
-            )
+
+def validate_rag_configuration() -> tuple[int, int]:
+    if DEFAULT_CHUNK_SIZE <= 0:
+        raise RuntimeError("RAG_CHUNK_SIZE must be greater than zero")
+    if DEFAULT_CHUNK_OVERLAP < 0 or DEFAULT_CHUNK_OVERLAP >= DEFAULT_CHUNK_SIZE:
+        raise RuntimeError("RAG_CHUNK_OVERLAP must be non-negative and smaller than RAG_CHUNK_SIZE")
+    return DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
+
+def _get_chroma_client():
+    global _chroma_client
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    return _chroma_client
+
+
+def _get_embedding_function():
+    global _embedding_function
+    if _embedding_function is None:
+        _embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=EMBEDDING_MODEL_NAME
         )
-    return _collection_cache[user_id]
+    return _embedding_function
+
+
+def get_collection(user_id: int):
+    # Resolve on every operation because another worker may have completed a
+    # privacy deletion and invalidated an older in-process collection handle.
+    return _get_chroma_client().get_or_create_collection(
+        name=f"kb_user_{user_id}",
+        embedding_function=_get_embedding_function(),
+    )
+
+
+def delete_user_collection(user_id: int) -> bool:
+    """Delete a user's complete vector collection if it exists."""
+    collection_name = f"kb_user_{user_id}"
+    client = _get_chroma_client()
+    names = {
+        getattr(collection, "name", str(collection))
+        for collection in client.list_collections()
+    }
+    if collection_name not in names:
+        return False
+    client.delete_collection(collection_name)
+    return True
 
 
 def extract_text_from_pdf(file_path):
@@ -97,13 +132,15 @@ def extract_text(file_path, file_type: str = None):
     if file_type not in extractors:
         raise ValueError(f"不支持的文件类型: {file_type}，支持: {list(extractors.keys())}")
 
-    logger.info(f"读取文档 ({file_type}): {file_path}")
+    logger.debug("读取文档类型: %s", file_type)
     return extractors[file_type](file_path)
 
 
 def split_text_into_chunks(text, chunk_size=None, overlap=None):
-    chunk_size = chunk_size or DEFAULT_CHUNK_SIZE
-    overlap = overlap or DEFAULT_CHUNK_OVERLAP
+    chunk_size = DEFAULT_CHUNK_SIZE if chunk_size is None else int(chunk_size)
+    overlap = DEFAULT_CHUNK_OVERLAP if overlap is None else int(overlap)
+    if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
+        raise ValueError("Invalid RAG chunk size/overlap configuration")
     chunks = []
     start = 0
     while start < len(text):
@@ -151,25 +188,16 @@ def index_document(file_path, user_id: int, original_filename: str = None, file_
                     to_delete.append(existing['ids'][i])
             if to_delete:
                 coll.delete(ids=to_delete)
-                logger.info(f"清理 {len(to_delete)} 条旧记录（来源: {source_name}）")
+                logger.info("已清理用户 %s 的 %s 条旧文档块", user_id, len(to_delete))
     except Exception as e:
         logger.warning(f"清理旧记录异常: {e}")
 
     import hashlib
-    prefix = hashlib.md5(source_name.encode()).hexdigest()[:8]
+    prefix = hashlib.sha256(source_name.encode("utf-8")).hexdigest()[:12]
     ids = [f"{prefix}_{i}" for i in range(len(chunks))]
     metadatas = [{"source": source_name, "file_type": file_type, "index": i} for i in range(len(chunks))]
-    coll.add(documents=chunks, ids=ids, metadatas=metadatas)
-    logger.info(f"已存入 {len(chunks)} 个文档块（来源: {source_name}）")
-
-    # 暂时注释掉可能导致问题的 modify，文件名在前端显示即可
-    # try:
-    #     source_name = original_filename if original_filename else pdf_path
-    #     coll.modify(metadata={"source": source_name})
-    # except Exception as e:
-    #     print(f"设置文件名元数据失败（不影响索引）: {e}")
-
-
+    coll.upsert(documents=chunks, ids=ids, metadatas=metadatas)
+    logger.info("已存入用户 %s 的 %s 个文档块", user_id, len(chunks))
 def search_document(query, user_id: int, top_k=3):
     """基础语义搜索，兼容旧接口"""
     coll = get_collection(user_id)

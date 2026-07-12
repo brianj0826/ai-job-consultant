@@ -1,5 +1,5 @@
 import os
-import shutil
+import logging
 import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -7,11 +7,35 @@ from pydantic import BaseModel
 
 from backend.services.access import current_user_id
 from backend.services.auth import require_business_csrf, require_current_user
+from backend.services.career import CareerConflictError, career_data_guard
 from backend.services.crawler import fetch_and_index, fetch_url as crawl_fetch
+from backend.services.rate_limit import check_request_limit
 from backend.services.rag import ALLOWED_EXTENSIONS, get_collection, index_document, rag_disabled
+from backend.services.resource_limits import (
+    DocumentValidationError,
+    ResourceLimitExceeded,
+    copy_upload_with_limit,
+    validate_document_limits,
+)
 
 
 router = APIRouter()
+logger = logging.getLogger("aiagent.documents")
+
+
+def _enforce_url_fetch_rate_limit(user_id: int) -> None:
+    try:
+        limit = int(os.getenv("FETCH_URL_RATE_LIMIT_PER_MINUTE", "10"))
+    except ValueError:
+        limit = 10
+    limit = max(1, min(limit, 120))
+    allowed, wait = check_request_limit(f"fetch-url:{user_id}", limit, 60)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="网页抓取请求过于频繁，请稍后再试",
+            headers={"Retry-After": str(wait)},
+        )
 
 
 class ImportUrlRequest(BaseModel):
@@ -35,17 +59,27 @@ def upload_document(
             detail=f"不支持的文件类型: {ext}，支持: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        temp_path = tmp.name
-
+    user_id = current_user_id(current_user)
+    temp_path = None
     try:
-        index_document(temp_path, current_user_id(current_user), filename, ext)
+        with career_data_guard(user_id):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                temp_path = tmp.name
+                copy_upload_with_limit(file.file, tmp)
+            validate_document_limits(temp_path, ext)
+            index_document(temp_path, user_id, filename, ext)
         return {"message": f"文档 {filename} 已成功导入知识库"}
+    except CareerConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ResourceLimitExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except DocumentValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"文档处理失败: {exc}") from exc
+        logger.exception("Document processing failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="文档处理失败，请稍后重试") from exc
     finally:
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
 
 
@@ -92,7 +126,13 @@ def import_url(
     """Fetch and index a web page for the authenticated user."""
     if rag_disabled():
         raise HTTPException(status_code=503, detail="Document indexing is disabled")
-    result = fetch_and_index(req.url, current_user_id(current_user))
+    user_id = current_user_id(current_user)
+    _enforce_url_fetch_rate_limit(user_id)
+    try:
+        with career_data_guard(user_id):
+            result = fetch_and_index(req.url, user_id)
+    except CareerConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
     return {
@@ -106,7 +146,7 @@ class FetchUrlRequest(BaseModel):
     url: str
 
 
-@router.post("/fetch-url")
+@router.post("/fetch-url", dependencies=[Depends(require_business_csrf)])
 def fetch_url_content(
     req: FetchUrlRequest,
     current_user: dict = Depends(require_current_user),
@@ -114,7 +154,8 @@ def fetch_url_content(
     """Fetch page text without storing it; login limits this proxy endpoint."""
     # Deliberately reference the dependency result so a future refactor cannot
     # accidentally remove the authenticated boundary from this endpoint.
-    current_user_id(current_user)
+    user_id = current_user_id(current_user)
+    _enforce_url_fetch_rate_limit(user_id)
     result = crawl_fetch(req.url)
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -137,9 +178,14 @@ def delete_source(
     if not source:
         raise HTTPException(status_code=400, detail="来源不能为空")
 
-    collection = get_collection(current_user_id(current_user))
+    user_id = current_user_id(current_user)
     try:
-        collection.delete(where={"source": source})
+        with career_data_guard(user_id):
+            collection = get_collection(user_id)
+            collection.delete(where={"source": source})
         return {"message": f"已删除来源 {source}", "ok": True}
+    except CareerConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"删除失败: {exc}") from exc
+        logger.exception("Knowledge source deletion failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="删除失败，请稍后重试") from exc
