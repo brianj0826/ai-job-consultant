@@ -26,21 +26,6 @@
         <span>职业工作台</span>
       </button>
 
-      <div class="sidebar-career-navigation" aria-label="结构化求职工具">
-        <RouterLink
-          v-for="item in careerNavigation"
-          :key="item.routeName"
-          class="sidebar-career-link"
-          :to="{ name: item.routeName }"
-          @click="$emit('close-navigation')"
-        >
-          <el-icon :size="17" aria-hidden="true">
-            <component :is="careerIcons[item.resource]" />
-          </el-icon>
-          <span>{{ item.label }}</span>
-        </RouterLink>
-      </div>
-
       <el-collapse v-model="activePanels" class="sidebar-collapse">
         <el-collapse-item name="chat">
           <template #title>
@@ -209,7 +194,7 @@
           </el-upload>
         </el-collapse-item>
 
-        <el-collapse-item v-if="docSources.length" name="career">
+        <el-collapse-item name="career">
           <template #title>
             <span class="collapse-title">
               <el-icon :size="17" aria-hidden="true"><Aim /></el-icon>
@@ -217,45 +202,51 @@
             </span>
           </template>
 
-          <div v-if="resumeSource" class="resume-file">
-            <el-icon :size="15" aria-hidden="true"><Document /></el-icon>
-            <span :title="resumeSource.title || resumeSource.source">{{ resumeSource.title || resumeSource.source }}</span>
+          <div class="career-resource-list" aria-label="结构化职业资源">
+            <RouterLink
+              v-for="item in careerNavigation"
+              :key="item.routeName"
+              class="sidebar-career-link"
+              :to="{ name: item.routeName }"
+              @click="$emit('close-navigation')"
+            >
+              <el-icon :size="17" aria-hidden="true">
+                <component :is="careerIcons[item.resource]" />
+              </el-icon>
+              <span>{{ item.label }}</span>
+            </RouterLink>
           </div>
 
-          <div class="career-route-grid">
-            <RouterLink :to="{ name: 'career-resumes' }" @click="$emit('close-navigation')">
-              <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
-              <span>管理简历</span>
-            </RouterLink>
-            <RouterLink :to="{ name: 'career-interviews' }" @click="$emit('close-navigation')">
-              <el-icon :size="15" aria-hidden="true"><ChatLineRound /></el-icon>
-              <span>面试中心</span>
-            </RouterLink>
-          </div>
+          <template v-if="docSources.length">
+            <div v-if="resumeSource" class="resume-file">
+              <el-icon :size="15" aria-hidden="true"><Document /></el-icon>
+              <span :title="resumeSource.title || resumeSource.source">{{ resumeSource.title || resumeSource.source }}</span>
+            </div>
 
-          <div class="jd-input-area">
-            <div class="jd-input-area__heading">
-              <span class="jd-input-area__label">
-                <el-icon :size="15" aria-hidden="true"><Files /></el-icon>
-                <span>目标岗位 JD</span>
-              </span>
-              <el-button size="small" :loading="fetchingJD" @click="handleFetchJD">
-                <el-icon :size="14" aria-hidden="true"><Link /></el-icon>
-                <span>链接导入</span>
-              </el-button>
+            <div class="jd-input-area">
+              <div class="jd-input-area__heading">
+                <span class="jd-input-area__label">
+                  <el-icon :size="15" aria-hidden="true"><Files /></el-icon>
+                  <span>目标岗位 JD</span>
+                </span>
+                <el-button size="small" :loading="fetchingJD" @click="handleFetchJD">
+                  <el-icon :size="14" aria-hidden="true"><Link /></el-icon>
+                  <span>链接导入</span>
+                </el-button>
+              </div>
+              <el-input v-model="jdText" type="textarea" :rows="5" placeholder="粘贴岗位 JD" size="small" />
+              <div class="button-grid jd-actions">
+                <el-button type="success" size="small" :disabled="!jdText || !resumeSource" @click="handleMatchJob">
+                  <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
+                  <span>匹配岗位</span>
+                </el-button>
+                <el-button type="warning" size="small" :disabled="!jdText" @click="handleGenQuestions">
+                  <el-icon :size="15" aria-hidden="true"><ChatDotRound /></el-icon>
+                  <span>生成题目</span>
+                </el-button>
+              </div>
             </div>
-            <el-input v-model="jdText" type="textarea" :rows="5" placeholder="粘贴岗位 JD" size="small" />
-            <div class="button-grid jd-actions">
-              <el-button type="success" size="small" :disabled="!jdText || !resumeSource" @click="handleMatchJob">
-                <el-icon :size="15" aria-hidden="true"><Aim /></el-icon>
-                <span>匹配岗位</span>
-              </el-button>
-              <el-button type="warning" size="small" :disabled="!jdText" @click="handleGenQuestions">
-                <el-icon :size="15" aria-hidden="true"><ChatDotRound /></el-icon>
-                <span>生成题目</span>
-              </el-button>
-            </div>
-          </div>
+          </template>
         </el-collapse-item>
 
         <el-collapse-item name="settings">
@@ -680,8 +671,11 @@ onUnmounted(() => {
 
 <style scoped>
 .sidebar-panel {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 100%;
   color: var(--color-text-primary);
 }
@@ -689,11 +683,12 @@ onUnmounted(() => {
 .sidebar-brand {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-2) var(--space-5);
+  min-height: 64px;
+  padding: var(--space-1) var(--space-2) var(--space-6);
   background: var(--color-surface);
 }
 
@@ -701,12 +696,14 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--color-border-strong);
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
   border-radius: var(--radius-control);
-  background: var(--color-primary-soft);
+  background: var(--aurora-gradient-soft);
   color: var(--color-primary);
+  box-shadow: inset 0 0 18px var(--color-aurora-blue-soft);
 }
 
 .sidebar-brand__copy,
@@ -739,21 +736,21 @@ onUnmounted(() => {
 }
 
 .sidebar-close:hover {
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
 
 .sidebar-close:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-strong);
 }
 
 .sidebar-brand__name {
   color: var(--color-text-primary);
-  font-size: var(--font-size-component-title);
+  font-size: var(--font-size-section-title);
   font-weight: 700;
-  line-height: var(--line-height-component-title);
+  line-height: var(--line-height-section-title);
 }
 
 .sidebar-brand__meta,
@@ -761,28 +758,38 @@ onUnmounted(() => {
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
+  font-family: var(--font-mono);
   line-height: var(--line-height-caption);
+  letter-spacing: 0.025em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sidebar-navigation {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
+  padding-right: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .sidebar-home {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: 42px;
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-2);
-  border: 1px solid transparent;
+  min-height: 52px;
+  padding: 0 var(--space-4);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   border-radius: var(--radius-control);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: linear-gradient(90deg, var(--color-primary-soft), var(--color-aurora-blue-soft));
+  color: var(--color-text-primary);
   font-size: var(--font-size-label);
   font-weight: 600;
   text-align: left;
@@ -793,28 +800,44 @@ onUnmounted(() => {
     color var(--duration-control) var(--ease-standard);
 }
 
+.sidebar-home::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--aurora-gradient);
+  content: '';
+}
+
+.sidebar-home .el-icon {
+  color: var(--color-primary);
+}
+
 .sidebar-home:hover {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-hover);
-  color: var(--color-primary-hover);
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary-soft) 86%, var(--color-surface)),
+    var(--color-aurora-blue-soft)
+  );
+  color: var(--color-text-primary);
 }
 
 .sidebar-home:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-strong);
 }
 
-.sidebar-career-navigation {
+.career-resource-list {
   display: grid;
   gap: var(--space-1);
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-4);
 }
 
 .sidebar-career-link {
   display: flex;
-  min-height: 40px;
+  min-height: 42px;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
@@ -831,7 +854,7 @@ onUnmounted(() => {
 }
 
 .sidebar-career-link:hover {
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
@@ -840,54 +863,50 @@ onUnmounted(() => {
   border-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  box-shadow: inset 2px 0 var(--color-primary);
+  box-shadow: inset 2px 0 var(--color-primary), inset 18px 0 28px var(--color-aurora-violet-soft);
 }
 
 .sidebar-career-link:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-strong);
 }
 
-.career-route-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.career-route-grid a {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
+.sidebar-navigation:has(.sidebar-career-link.router-link-active) .sidebar-home {
+  border-color: transparent;
+  background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-caption);
-  font-weight: 600;
-  text-decoration: none;
 }
 
-.career-route-grid a:hover,
-.career-route-grid a:focus-visible {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+.sidebar-navigation:has(.sidebar-career-link.router-link-active) .sidebar-home::before {
+  opacity: 0;
+}
+
+.sidebar-navigation:has(.sidebar-career-link.router-link-active) .sidebar-home .el-icon {
+  color: currentColor;
 }
 
 .sidebar-collapse {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   border: 0;
 }
 
 .sidebar-collapse :deep(.el-collapse-item) {
-  margin-bottom: var(--space-1);
+  flex: 0 0 auto;
+  margin-bottom: var(--space-2);
+}
+
+.sidebar-collapse :deep(.el-collapse-item:last-child) {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
 .sidebar-collapse :deep(.el-collapse-item__header) {
-  min-height: 42px;
-  padding: var(--space-2) var(--space-3);
-  border: 0;
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
@@ -900,11 +919,24 @@ onUnmounted(() => {
 }
 
 .sidebar-collapse :deep(.el-collapse-item__header:hover) {
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
   color: var(--color-text-primary);
 }
 
+.sidebar-collapse :deep(.el-collapse-item__header.is-active) {
+  border-color: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--color-primary-soft) 62%, transparent);
+  color: var(--color-primary);
+}
+
+.sidebar-collapse :deep(.el-collapse-item__header:focus-visible) {
+  outline: none;
+  box-shadow: var(--focus-ring-strong);
+}
+
 .sidebar-collapse :deep(.el-collapse-item__arrow) {
+  margin-right: var(--space-1);
   color: var(--color-text-muted);
 }
 
@@ -914,13 +946,14 @@ onUnmounted(() => {
 }
 
 .sidebar-collapse :deep(.el-collapse-item__content) {
-  padding: var(--space-2) var(--space-1) var(--space-4);
+  padding: var(--space-3) var(--space-1) var(--space-5) var(--space-3);
+  border-left: 1px solid var(--color-border);
 }
 
 .collapse-title {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .session-picker,
@@ -937,7 +970,8 @@ onUnmounted(() => {
 }
 
 .icon-button {
-  width: 32px;
+  width: 36px;
+  min-height: 36px;
   padding: 0;
 }
 
@@ -952,6 +986,7 @@ onUnmounted(() => {
 .upload-control :deep(.el-button) {
   justify-content: center;
   width: 100%;
+  min-height: 36px;
   margin: 0;
 }
 
@@ -964,6 +999,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--space-1);
   max-width: 100%;
+  min-height: 28px;
 }
 
 .knowledge-refreshing,
@@ -997,7 +1033,7 @@ onUnmounted(() => {
 
 .source-list {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin-top: var(--space-3);
 }
 
@@ -1006,15 +1042,21 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
-  transition: background-color var(--duration-control) var(--ease-standard);
+  transition:
+    background-color var(--duration-control) var(--ease-standard),
+    border-color var(--duration-control) var(--ease-standard);
 }
 
 .source-item:hover {
+  border-color: var(--color-border);
   background: var(--color-surface-hover);
 }
 
@@ -1039,8 +1081,8 @@ onUnmounted(() => {
 }
 
 .source-delete {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   margin: 0;
 }
 
@@ -1054,6 +1096,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  min-height: 42px;
   padding: var(--space-2) var(--space-3);
   margin-bottom: var(--space-3);
   overflow: hidden;
@@ -1074,7 +1117,9 @@ onUnmounted(() => {
 .jd-input-area {
   display: grid;
   gap: var(--space-2);
+  padding-top: var(--space-3);
   margin-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
 .jd-input-area__heading {
@@ -1104,7 +1149,7 @@ onUnmounted(() => {
 .jd-input-area :deep(.el-textarea__inner:focus) {
   border-color: var(--color-primary);
   background: var(--color-surface);
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-strong);
 }
 
 .setting-row {
@@ -1112,7 +1157,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  min-height: 36px;
+  min-height: 44px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   color: var(--color-text-secondary);
@@ -1131,13 +1176,14 @@ onUnmounted(() => {
 
 .settings-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
 
 .settings-actions .el-button {
   width: 100%;
+  min-height: 36px;
   margin: 0;
 }
 
@@ -1145,17 +1191,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin: var(--space-2) 0 0;
+  min-height: 40px;
+  margin: var(--space-3) 0 0;
   padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
 }
 
 .status-dot {
+  flex: 0 0 8px;
   width: 8px;
   height: 8px;
+  border: 2px solid var(--color-surface);
   border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 1px currentColor;
 }
 
 .status-on {
@@ -1167,11 +1220,13 @@ onUnmounted(() => {
 }
 
 .sidebar-account {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-2) var(--space-1);
-  margin-top: var(--space-4);
+  min-height: 64px;
+  padding: var(--space-4) var(--space-2) 0;
+  margin-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
 
@@ -1179,13 +1234,13 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border);
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, var(--color-border));
   border-radius: var(--radius-pill);
-  background: var(--color-surface-subtle);
-  color: var(--color-text-secondary);
+  background: var(--aurora-gradient-soft);
+  color: var(--color-primary);
 }
 
 .sidebar-account__identity {
@@ -1203,16 +1258,52 @@ onUnmounted(() => {
 }
 
 .sidebar-account__logout {
+  min-height: 36px;
   margin: 0;
 }
 
 @media (max-width: 767px) {
   .sidebar-brand {
-    padding-top: var(--space-2);
+    min-height: 56px;
+    padding: 0 0 var(--space-5);
+  }
+
+  .sidebar-home,
+  .sidebar-career-link,
+  .sidebar-collapse :deep(.el-collapse-item__header),
+  .setting-row {
+    min-height: 48px;
+  }
+
+  .icon-button,
+  .source-delete,
+  .sidebar-account__logout,
+  .settings-actions .el-button,
+  .button-stack :deep(.el-button),
+  .button-grid :deep(.el-button),
+  .upload-control :deep(.el-button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .sidebar-collapse :deep(.el-collapse-item__content) {
+    padding-right: 0;
+    padding-left: var(--space-4);
   }
 
   .sidebar-account {
-    padding-bottom: var(--space-2);
+    padding: var(--space-4) 0 var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-close,
+  .sidebar-home,
+  .sidebar-career-link,
+  .sidebar-collapse :deep(.el-collapse-item__header),
+  .source-item,
+  .setting-row {
+    transition-duration: 0.01ms;
   }
 }
 </style>
