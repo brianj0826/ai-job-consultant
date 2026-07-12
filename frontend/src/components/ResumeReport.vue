@@ -1,30 +1,31 @@
 <template>
-  <el-drawer
+  <InsightDrawerShell
     v-model="visible"
-    class="report-drawer"
-    direction="rtl"
-    size="var(--panel-width)"
     @opened="handleDrawerOpened"
     @close="handleDrawerClose"
     @closed="handleDrawerClosed"
   >
-    <template #header>
+    <template #header="{ titleId, titleClass }">
       <div class="drawer-heading">
         <div class="drawer-heading__icon" aria-hidden="true">
           <el-icon><DocumentChecked /></el-icon>
         </div>
         <div>
           <p class="technical-label">RESUME INTELLIGENCE</p>
-          <h2>简历分析报告</h2>
+          <h2 :id="titleId" :class="titleClass">简历分析报告</h2>
         </div>
       </div>
     </template>
 
     <section class="report-panel" aria-label="简历分析报告">
       <div v-if="!reportText" class="report-state" role="status">
-        <el-icon aria-hidden="true"><Document /></el-icon>
+        <div class="report-state__visual" aria-hidden="true">
+          <span class="report-state__orbit"></span>
+          <el-icon><Document /></el-icon>
+        </div>
+        <p class="technical-label">AWAITING ANALYSIS</p>
         <h3>暂无分析结果</h3>
-        <p>上传简历后，向职达 AI 发起“分析简历”即可在这里查看结果。</p>
+        <p>上传简历后，向职达 AI 发起“分析简历”，真实分析结果会显示在这里。</p>
       </div>
 
       <template v-else>
@@ -47,11 +48,12 @@
 
         <section v-else class="score-unavailable" aria-labelledby="resume-score-unavailable-title">
           <el-icon aria-hidden="true"><WarningFilled /></el-icon>
-          <div>
+          <div class="score-unavailable__copy">
             <p class="technical-label">SCORE UNAVAILABLE</p>
             <h3 id="resume-score-unavailable-title">未解析到综合评分</h3>
             <p>报告正文仍可查看；系统不会用默认分数替代实际结果。</p>
           </div>
+          <strong class="score-unavailable__value tabular-nums" aria-label="综合评分未解析">—</strong>
         </section>
 
         <section class="report-content" aria-labelledby="resume-report-content-title">
@@ -60,12 +62,13 @@
               <p class="technical-label">ANALYSIS DETAILS</p>
               <h3 id="resume-report-content-title">完整分析</h3>
             </div>
+            <span class="report-content__status">基于本次报告</span>
           </div>
           <div class="report-markdown" v-html="renderedReport"></div>
         </section>
       </template>
     </section>
-  </el-drawer>
+  </InsightDrawerShell>
 </template>
 
 <script setup>
@@ -77,6 +80,7 @@ import { init as initECharts, use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { marked } from 'marked'
 import { useReducedMotion } from '../composables/useReducedMotion'
+import InsightDrawerShell from './InsightDrawerShell.vue'
 
 use([GaugeChart, CanvasRenderer])
 
@@ -93,9 +97,14 @@ let chartResizeObserver = null
 let resizeFrame = null
 
 const score = computed(() => {
-  const primaryMatch = props.reportText.match(/(?:综合评分|评分)[^\n：:]*[：:]\s*(\d+(?:\.\d+)?)\s*分/i)
-  const fallbackMatch = props.reportText.match(/(\d+(?:\.\d+)?)\s*分/)
-  const rawScore = Number(primaryMatch?.[1] || fallbackMatch?.[1])
+  const scoreLine = props.reportText
+    .split('\n')
+    .map((line) => line.replace(/[*_#`]/g, '').trim())
+    .map((line) => line.match(
+      /^(?:[-•]\s*)?(?:综合评分|评分)\s*(?:[：:]|\s)\s*(\d+(?:\.\d+)?)\s*(?:\/\s*10)?\s*(?:分)?\s*(?:[（(][^)）]*[)）])?\s*$/i
+    ))
+    .find(Boolean)
+  const rawScore = Number(scoreLine?.[1])
 
   return Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 10 ? rawScore : null
 })
@@ -234,18 +243,25 @@ defineExpose({ open, close })
 .drawer-heading {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  min-width: 0;
+  gap: var(--space-4);
 }
 
 .drawer-heading__icon {
+  position: relative;
   display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 2.75rem;
   place-items: center;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
-  background: var(--color-primary-soft);
+  background:
+    linear-gradient(var(--color-surface-elevated), var(--color-surface-elevated)) padding-box,
+    var(--aurora-gradient) border-box;
   color: var(--color-primary);
+  box-shadow: 0 0 1.5rem var(--color-aurora-violet-soft);
+  font-size: 1.35rem;
 }
 
 .drawer-heading .technical-label {
@@ -256,11 +272,12 @@ defineExpose({ open, close })
   margin: 0;
   font-size: var(--font-size-component-title);
   line-height: var(--line-height-component-title);
+  letter-spacing: -.015em;
 }
 
 .report-panel {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-8);
   padding-bottom: var(--space-6);
 }
 
@@ -268,23 +285,72 @@ defineExpose({ open, close })
 .score-unavailable {
   display: grid;
   justify-items: center;
-  padding: var(--space-10) var(--space-6);
+  min-height: 20rem;
+  padding: var(--space-12) var(--space-6);
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-panel);
-  background: var(--color-surface-subtle);
+  background:
+    radial-gradient(circle at 50% 36%, var(--color-aurora-cyan-soft), transparent 10rem),
+    var(--color-surface-subtle);
   color: var(--color-text-muted);
   text-align: center;
 }
 
-.report-state > .el-icon {
-  margin-bottom: var(--space-4);
+.report-state__visual {
+  position: relative;
+  display: grid;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin-bottom: var(--space-5);
+  place-items: center;
+}
+
+.report-state__visual::before,
+.report-state__orbit {
+  position: absolute;
+  border: 1px solid var(--color-orbit);
+  border-radius: 50%;
+  content: '';
+}
+
+.report-state__visual::before {
+  inset: .65rem;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--aurora-glow);
+}
+
+.report-state__orbit {
+  inset: 0;
+}
+
+.report-state__orbit::after {
+  position: absolute;
+  top: .35rem;
+  left: 50%;
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: var(--color-cyan);
+  box-shadow: 0 0 1rem var(--color-cyan);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.report-state__visual > .el-icon {
+  position: relative;
   color: var(--color-cyan);
-  font-size: 2rem;
+  font-size: 1.65rem;
+}
+
+.report-state .technical-label {
+  margin: 0 0 var(--space-2);
+  color: var(--color-cyan);
 }
 
 .report-state h3,
 .score-unavailable h3 {
-  margin-bottom: var(--space-2);
+  margin: 0 0 var(--space-2);
   font-size: var(--font-size-component-title);
 }
 
@@ -296,15 +362,31 @@ defineExpose({ open, close })
 }
 
 .score-overview {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(9rem, .85fr) minmax(0, 1.15fr);
   align-items: center;
   gap: var(--space-5);
-  padding: var(--space-5);
+  min-height: 12rem;
+  padding: var(--space-6);
+  overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-panel);
-  background: var(--color-surface-subtle);
+  background:
+    radial-gradient(circle at 12% 0, var(--color-aurora-violet-soft), transparent 15rem),
+    var(--color-surface-subtle);
   box-shadow: var(--shadow-card);
+}
+
+.score-overview::after {
+  position: absolute;
+  right: var(--space-5);
+  bottom: 0;
+  left: var(--space-5);
+  height: 1px;
+  background: var(--aurora-gradient);
+  content: '';
+  opacity: .7;
 }
 
 .score-chart-wrap {
@@ -322,7 +404,7 @@ defineExpose({ open, close })
 }
 
 .score-copy h3 {
-  margin-bottom: var(--space-2);
+  margin: 0 0 var(--space-2);
   font-size: var(--font-size-component-title);
 }
 
@@ -349,33 +431,67 @@ defineExpose({ open, close })
 }
 
 .score-unavailable {
-  grid-template-columns: auto minmax(0, 1fr);
+  position: relative;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   justify-items: start;
-  gap: var(--space-3);
-  padding: var(--space-5);
+  align-items: start;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-6);
   border-style: solid;
+  border-color: color-mix(in srgb, var(--color-warning) 52%, var(--color-border));
+  background:
+    radial-gradient(circle at 100% 0, var(--color-warning-soft), transparent 18rem),
+    var(--color-surface-subtle);
   text-align: left;
 }
 
 .score-unavailable > .el-icon {
-  margin-top: .15rem;
+  margin-top: .2rem;
   color: var(--color-warning);
-  font-size: 1.25rem;
+  font-size: 1.35rem;
 }
 
 .score-unavailable .technical-label {
   margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.score-unavailable__copy {
+  min-width: 0;
+}
+
+.score-unavailable__value {
+  align-self: center;
+  padding-left: var(--space-4);
+  color: var(--color-warning);
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1;
 }
 
 .report-content {
-  padding-top: var(--space-6);
+  position: relative;
+  padding-top: var(--space-8);
   border-top: 1px solid var(--color-border);
+}
+
+.report-content::before {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 5rem;
+  height: 1px;
+  background: var(--aurora-gradient);
+  content: '';
 }
 
 .report-content__heading {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: var(--space-5);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 .report-content__heading .technical-label {
@@ -387,22 +503,40 @@ defineExpose({ open, close })
   font-size: var(--font-size-component-title);
 }
 
+.report-content__status {
+  padding: .35rem .65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .report-markdown {
   max-width: 70ch;
   overflow-wrap: anywhere;
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
-  line-height: 1.85;
+  line-height: 1.8;
 }
 
 .report-markdown :deep(h1),
 .report-markdown :deep(h2),
 .report-markdown :deep(h3),
 .report-markdown :deep(h4) {
-  margin: var(--space-6) 0 var(--space-2);
+  margin: var(--space-8) 0 var(--space-3);
   color: var(--color-text-primary);
   font-size: var(--font-size-component-title);
   line-height: var(--line-height-component-title);
+}
+
+.report-markdown :deep(h1),
+.report-markdown :deep(h2) {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .report-markdown :deep(h1:first-child),
@@ -417,7 +551,7 @@ defineExpose({ open, close })
 .report-markdown :deep(ul),
 .report-markdown :deep(ol),
 .report-markdown :deep(blockquote) {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-4);
 }
 
 .report-markdown :deep(ul),
@@ -426,7 +560,7 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(li + li) {
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .report-markdown :deep(strong) {
@@ -434,8 +568,9 @@ defineExpose({ open, close })
 }
 
 .report-markdown :deep(blockquote) {
-  padding-left: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border-left: 2px solid var(--color-cyan);
+  background: linear-gradient(90deg, var(--color-aurora-cyan-soft), transparent);
   color: var(--color-text-secondary);
 }
 
@@ -464,14 +599,63 @@ defineExpose({ open, close })
   background: transparent;
 }
 
+.report-markdown :deep(a) {
+  color: var(--color-primary);
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  text-underline-offset: .2em;
+}
+
+.report-markdown :deep(hr) {
+  height: 1px;
+  margin: var(--space-8) 0;
+  border: 0;
+  background: var(--color-border);
+}
+
 @media (max-width: 440px) {
+  .drawer-heading {
+    gap: var(--space-3);
+  }
+
+  .drawer-heading__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-basis: 2.5rem;
+  }
+
   .score-overview {
     grid-template-columns: 1fr;
+    padding: var(--space-5);
   }
 
   .score-chart {
     width: min(100%, 12rem);
     margin: 0 auto;
+  }
+
+  .score-unavailable {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--space-5);
+  }
+
+  .score-unavailable__value {
+    grid-column: 2;
+    padding: 0;
+    font-size: 2.5rem;
+  }
+
+  .report-content__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .drawer-heading__icon,
+  .report-state,
+  .score-overview,
+  .score-unavailable {
+    background: var(--color-surface-subtle);
   }
 }
 </style>
