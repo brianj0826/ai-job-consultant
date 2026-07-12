@@ -13,7 +13,9 @@ test('Docker stack connects the Vue UI, FastAPI, MySQL, Redis and mocked AI prov
   await page.locator('.submit-btn').click()
 
   await expect(page).toHaveURL(/\/$/)
-  const composer = page.locator('#chat-message-input')
+  await expect(page.getByRole('heading', { name: '职业工作台' })).toBeVisible()
+  await page.getByRole('button', { name: /模拟面试训练/ }).click()
+  const composer = page.getByRole('textbox', { name: '向职达 AI 提问' })
   await expect(composer).toBeEnabled()
 
   const streamRequestPromise = page.waitForRequest((request) => (
