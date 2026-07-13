@@ -1,35 +1,39 @@
 <template>
-  <el-drawer
-    v-model="visible"
-    class="analytics-drawer"
-    direction="rtl"
-    size="var(--panel-width)"
-    @open="loadData"
-  >
-    <template #header>
-      <div class="drawer-heading">
-        <div class="drawer-heading__icon" aria-hidden="true">
-          <el-icon><DataAnalysis /></el-icon>
-        </div>
+  <InsightDrawerShell v-model="visible" @open="loadData">
+    <template #header="{ titleId, titleClass }">
+      <div class="insight-heading">
+        <span class="insight-heading__mark" aria-hidden="true">
+          <i></i>
+          <i></i>
+          <i></i>
+          <i></i>
+        </span>
         <div>
-          <p class="technical-label">CAREER INTELLIGENCE</p>
-          <h2>数据分析</h2>
+          <h2 :id="titleId" :class="titleClass">数据分析</h2>
+          <p class="technical-label">WORKSPACE INSIGHTS</p>
         </div>
       </div>
     </template>
 
     <section class="analytics-panel" aria-label="求职数据分析">
       <div v-if="loading" class="panel-state" role="status">
-        <el-icon class="panel-state__icon is-loading" aria-hidden="true"><Loading /></el-icon>
+        <span class="panel-state__signal" aria-hidden="true">
+          <el-icon class="panel-state__icon is-loading"><Loading /></el-icon>
+        </span>
         <h3>正在加载工作数据</h3>
         <p>正在汇总对话、反馈和知识库信息。</p>
       </div>
 
       <div v-else-if="loadError" class="panel-state panel-state--error" role="alert">
-        <el-icon class="panel-state__icon" aria-hidden="true"><WarningFilled /></el-icon>
+        <span class="panel-state__signal" aria-hidden="true">
+          <el-icon class="panel-state__icon"><WarningFilled /></el-icon>
+        </span>
         <h3>暂时无法加载数据</h3>
         <p>{{ loadError }}</p>
-        <el-button plain @click="loadData">重新加载</el-button>
+        <el-button plain @click="loadData">
+          <el-icon aria-hidden="true"><RefreshRight /></el-icon>
+          重新加载
+        </el-button>
       </div>
 
       <template v-else>
@@ -39,24 +43,20 @@
               <p class="technical-label">CONVERSATION ACTIVITY</p>
               <h3 id="analytics-overview-title">求职对话概览</h3>
             </div>
-            <el-icon aria-hidden="true"><TrendCharts /></el-icon>
           </div>
 
           <div class="metric-grid">
-            <article class="metric-card metric-card--primary">
-              <el-icon class="metric-icon" aria-hidden="true"><ChatDotRound /></el-icon>
-              <strong class="metric-value tabular-nums">{{ overview.total_sessions }}</strong>
+            <article class="metric-item">
               <span>会话数</span>
+              <strong class="metric-value tabular-nums">{{ overview.total_sessions ?? '—' }}</strong>
             </article>
-            <article class="metric-card metric-card--info">
-              <el-icon class="metric-icon" aria-hidden="true"><TrendCharts /></el-icon>
-              <strong class="metric-value tabular-nums">{{ overview.total_messages }}</strong>
+            <article class="metric-item">
               <span>消息数</span>
+              <strong class="metric-value tabular-nums">{{ overview.total_messages ?? '—' }}</strong>
             </article>
-            <article class="metric-card metric-card--cyan">
-              <el-icon class="metric-icon" aria-hidden="true"><Document /></el-icon>
-              <strong class="metric-value tabular-nums">{{ resumeCount ?? '—' }}</strong>
+            <article class="metric-item">
               <span>已上传文件</span>
+              <strong class="metric-value tabular-nums">{{ resumeCount ?? '—' }}</strong>
             </article>
           </div>
 
@@ -72,52 +72,59 @@
               <p class="technical-label">RESPONSE QUALITY</p>
               <h3 id="feedback-title">反馈统计</h3>
             </div>
-            <el-icon aria-hidden="true"><CircleCheckFilled /></el-icon>
           </div>
 
           <template v-if="feedback.total_rated > 0">
             <div class="feedback-summary">
-              <span>满意度</span>
-              <strong class="tabular-nums">{{ feedback.like_rate }}%</strong>
-              <span>{{ feedback.total_rated }} 条已评价回复</span>
+              <div>
+                <span>满意度</span>
+                <strong class="tabular-nums">{{ feedback.like_rate }}%</strong>
+              </div>
+              <p>{{ feedback.total_rated }} 条已评价回复</p>
             </div>
 
-            <div class="feedback-metric">
-              <div class="feedback-metric__heading">
-                <span class="feedback-metric__label feedback-metric__label--positive">
-                  <el-icon aria-hidden="true"><CircleCheckFilled /></el-icon>
-                  有帮助
-                </span>
-                <strong class="tabular-nums">{{ feedback.likes }}</strong>
+            <div class="feedback-breakdown">
+              <div class="feedback-metric">
+                <div class="feedback-metric__heading">
+                  <span class="feedback-metric__label feedback-metric__label--positive">
+                    <el-icon aria-hidden="true"><CircleCheckFilled /></el-icon>
+                    有帮助
+                  </span>
+                  <strong class="tabular-nums">{{ feedback.likes }}</strong>
+                </div>
+                <el-progress
+                  :percentage="feedback.like_rate"
+                  :color="statusColors.success"
+                  :show-text="false"
+                  :stroke-width="8"
+                />
               </div>
-              <el-progress
-                :percentage="feedback.like_rate"
-                :color="statusColors.success"
-                :show-text="false"
-                :stroke-width="8"
-              />
-            </div>
 
-            <div class="feedback-metric">
-              <div class="feedback-metric__heading">
-                <span class="feedback-metric__label feedback-metric__label--negative">
-                  <el-icon aria-hidden="true"><CircleCloseFilled /></el-icon>
-                  需要改进
-                </span>
-                <strong class="tabular-nums">{{ feedback.dislikes }}</strong>
+              <div class="feedback-metric">
+                <div class="feedback-metric__heading">
+                  <span class="feedback-metric__label feedback-metric__label--negative">
+                    <el-icon aria-hidden="true"><CircleCloseFilled /></el-icon>
+                    需要改进
+                  </span>
+                  <strong class="tabular-nums">{{ feedback.dislikes }}</strong>
+                </div>
+                <el-progress
+                  :percentage="100 - feedback.like_rate"
+                  :color="statusColors.danger"
+                  :show-text="false"
+                  :stroke-width="8"
+                />
               </div>
-              <el-progress
-                :percentage="100 - feedback.like_rate"
-                :color="statusColors.danger"
-                :show-text="false"
-                :stroke-width="8"
-              />
             </div>
           </template>
 
           <div v-else class="section-empty-state">
-            <el-icon aria-hidden="true"><ChatDotRound /></el-icon>
-            <p>还没有已提交的回答反馈。</p>
+            <span class="empty-illustration" aria-hidden="true">
+              <el-icon><ChatDotRound /></el-icon>
+              <i>—</i>
+            </span>
+            <h4>还没有已提交的回答反馈。</h4>
+            <p>为 AI 回答标记有帮助或需要改进后，统计会显示在这里。</p>
           </div>
         </section>
 
@@ -127,31 +134,41 @@
               <p class="technical-label">SEVEN-DAY SIGNAL</p>
               <h3 id="trend-title">近 7 天消息趋势</h3>
             </div>
-            <el-icon aria-hidden="true"><TrendCharts /></el-icon>
           </div>
 
-          <div v-if="hasTrendData" class="trend-list">
-            <div v-for="item in trend" :key="item.date" class="trend-row">
-              <time :datetime="item.date">{{ formatDate(item.date) }}</time>
-              <el-progress
-                class="trend-row__progress"
-                :percentage="trendPercentage(item.count)"
-                :color="statusColors.primary"
-                :show-text="false"
-                :stroke-width="8"
-              />
-              <strong class="trend-row__value tabular-nums">{{ item.count }}</strong>
+          <div
+            class="trend-chart"
+            :class="{ 'trend-chart--empty': !hasTrendData }"
+            role="img"
+            :aria-label="hasTrendData ? '近 7 天每日消息数量柱状图' : '近 7 天没有消息数据'"
+          >
+            <div class="trend-chart__grid" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <div v-if="hasTrendData" class="trend-bars" aria-hidden="true">
+              <div v-for="item in trend" :key="item.date" class="trend-column">
+                <strong class="tabular-nums">{{ item.count }}</strong>
+                <span
+                  class="trend-column__bar"
+                  :style="{ '--trend-height': `${trendPercentage(item.count)}%` }"
+                ></span>
+                <time :datetime="item.date">{{ formatDate(item.date) }}</time>
+              </div>
             </div>
           </div>
 
-          <div v-else class="section-empty-state">
-            <el-icon aria-hidden="true"><TrendCharts /></el-icon>
-            <p>最近 7 天还没有可展示的消息数据。</p>
-          </div>
+          <p v-if="!hasTrendData" class="trend-empty-note">最近 7 天还没有可展示的消息数据。</p>
         </section>
+
+        <footer class="analytics-actions">
+          <el-button plain @click="loadData">
+            <el-icon aria-hidden="true"><RefreshRight /></el-icon>
+            刷新数据
+          </el-button>
+        </footer>
       </template>
     </section>
-  </el-drawer>
+  </InsightDrawerShell>
 </template>
 
 <script setup>
@@ -160,12 +177,11 @@ import {
   ChatDotRound,
   CircleCheckFilled,
   CircleCloseFilled,
-  DataAnalysis,
-  Document,
   Loading,
-  TrendCharts,
+  RefreshRight,
   WarningFilled
 } from '@element-plus/icons-vue'
+import InsightDrawerShell from './InsightDrawerShell.vue'
 import {
   getDocStatus,
   getAnalyticsFeedback,
@@ -249,157 +265,171 @@ defineExpose({ open, close })
 </script>
 
 <style scoped>
-.drawer-heading {
+.insight-heading {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
-.drawer-heading__icon {
-  display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
-  place-items: center;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-control);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+.insight-heading__mark {
+  display: flex;
+  height: 2rem;
+  flex: 0 0 2.25rem;
+  align-items: flex-end;
+  justify-content: center;
+  gap: .2rem;
+  filter: drop-shadow(0 0 10px var(--color-aurora-violet-soft));
 }
 
-.drawer-heading .technical-label {
-  margin: 0 0 var(--space-1);
+.insight-heading__mark i {
+  width: .28rem;
+  border-radius: var(--radius-pill);
+  background: var(--aurora-gradient);
 }
 
-.drawer-heading h2 {
+.insight-heading__mark i:nth-child(1) { height: 48%; }
+.insight-heading__mark i:nth-child(2) { height: 92%; }
+.insight-heading__mark i:nth-child(3) { height: 66%; }
+.insight-heading__mark i:nth-child(4) { height: 38%; }
+
+.insight-heading h2 {
+  margin: 0 0 .1rem;
+  color: var(--color-text-primary);
+  font-size: 1.35rem;
+  line-height: 1.6rem;
+  letter-spacing: .03em;
+}
+
+.insight-heading .technical-label {
   margin: 0;
-  font-size: var(--font-size-component-title);
-  line-height: var(--line-height-component-title);
+  color: var(--color-text-muted);
+  font-size: .67rem;
+  letter-spacing: .08em;
 }
 
 .analytics-panel {
   display: grid;
-  gap: var(--space-8);
-  padding-bottom: var(--space-6);
+  min-width: 0;
 }
 
 .analytics-section {
-  padding-bottom: var(--space-8);
+  min-width: 0;
+  padding: var(--space-6) 0 var(--space-8);
   border-bottom: 1px solid var(--color-border);
 }
 
-.analytics-section:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+.analytics-section:first-of-type {
+  padding-top: 0;
 }
 
 .section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-  color: var(--color-text-muted);
+  margin-bottom: var(--space-5);
 }
 
 .section-heading .technical-label {
-  margin: 0 0 var(--space-1);
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: .68rem;
+  letter-spacing: .075em;
 }
 
 .section-heading h3 {
   margin: 0;
-  font-size: var(--font-size-component-title);
-  line-height: var(--line-height-component-title);
-}
-
-.section-heading > .el-icon {
-  margin-top: var(--space-1);
-  color: var(--color-cyan);
-  font-size: 1.15rem;
+  color: var(--color-text-primary);
+  font-size: 1.16rem;
+  line-height: 1.55;
+  letter-spacing: .025em;
 }
 
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
+  margin: 0 calc(var(--space-3) * -1);
 }
 
-.metric-card {
+.metric-item {
   display: grid;
-  gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-subtle);
+  justify-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  text-align: center;
 }
 
-.metric-icon {
-  color: var(--color-text-muted);
-  font-size: 1rem;
+.metric-item + .metric-item {
+  border-left: 1px solid var(--color-border-strong);
+}
+
+.metric-item span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  white-space: nowrap;
 }
 
 .metric-value {
+  max-width: 100%;
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: 1.75rem;
+  font-size: 1.5rem;
+  font-weight: 560;
   line-height: 1;
   text-overflow: ellipsis;
 }
 
-.metric-card span {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-caption);
-}
-
-.metric-card--primary .metric-icon {
-  color: var(--color-primary);
-}
-
-.metric-card--info .metric-icon {
-  color: var(--color-electric-blue);
-}
-
-.metric-card--cyan .metric-icon {
-  color: var(--color-cyan);
-}
-
 .data-note {
-  margin: var(--space-3) 0 0;
+  margin: var(--space-5) 0 0;
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
+  line-height: 1.65;
 }
 
 .feedback-summary {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-1) var(--space-3);
-  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: var(--space-5);
+  align-items: center;
   margin-bottom: var(--space-5);
-  padding: var(--space-4);
+  padding: var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  background: var(--color-surface-subtle);
+  background:
+    linear-gradient(135deg, var(--color-primary-soft), transparent 58%),
+    var(--color-surface-subtle);
 }
 
-.feedback-summary > span:first-child {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-label);
+.feedback-summary > div {
+  display: grid;
+  gap: var(--space-1);
 }
 
-.feedback-summary strong {
-  color: var(--color-success);
-  font-size: var(--font-size-metric);
-  line-height: 1;
-}
-
-.feedback-summary > span:last-child {
-  grid-column: 1 / -1;
+.feedback-summary span,
+.feedback-summary p {
   color: var(--color-text-muted);
   font-size: var(--font-size-caption);
 }
 
-.feedback-metric + .feedback-metric {
-  margin-top: var(--space-4);
+.feedback-summary strong {
+  color: var(--color-success-text);
+  font-size: var(--font-size-metric);
+  font-weight: 580;
+  line-height: 1;
+}
+
+.feedback-summary p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.feedback-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.feedback-metric {
+  min-width: 0;
 }
 
 .feedback-metric__heading {
@@ -414,109 +444,261 @@ defineExpose({ open, close })
 
 .feedback-metric__label {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-2);
 }
 
-.feedback-metric__label--positive .el-icon {
-  color: var(--color-success);
-}
+.feedback-metric__label--positive .el-icon { color: var(--color-success-text); }
+.feedback-metric__label--negative .el-icon { color: var(--color-danger-text); }
 
-.feedback-metric__label--negative .el-icon {
-  color: var(--color-danger);
+.feedback-metric :deep(.el-progress-bar__outer) {
+  background: var(--color-surface-hover);
 }
 
 .section-empty-state,
 .panel-state {
   display: grid;
   justify-items: center;
-  padding: var(--space-8) var(--space-5);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-card);
-  background: var(--color-surface-subtle);
-  color: var(--color-text-muted);
   text-align: center;
 }
 
-.section-empty-state .el-icon {
-  margin-bottom: var(--space-2);
-  color: var(--color-cyan);
-  font-size: 1.25rem;
+.section-empty-state {
+  min-height: 10.5rem;
+  align-content: center;
+  padding: var(--space-5);
+}
+
+.empty-illustration {
+  position: relative;
+  display: grid;
+  width: 5.25rem;
+  height: 4.25rem;
+  margin-bottom: var(--space-3);
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.empty-illustration::before {
+  position: absolute;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--aurora-gradient-soft);
+  content: '';
+  opacity: .6;
+}
+
+.empty-illustration .el-icon {
+  position: relative;
+  z-index: 1;
+  font-size: 3rem;
+}
+
+.empty-illustration i {
+  position: absolute;
+  right: .25rem;
+  bottom: .3rem;
+  z-index: 2;
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 2px solid var(--color-primary);
+  border-radius: 50%;
+  background: var(--color-surface-elevated);
+  color: var(--color-primary-text);
+  font-family: var(--font-mono);
+  font-style: normal;
+  line-height: 1;
+}
+
+.section-empty-state h4 {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-label);
+  font-weight: 600;
 }
 
 .section-empty-state p {
+  max-width: 25rem;
   margin: 0;
-  font-size: var(--font-size-label);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.65;
 }
 
-.trend-list {
+.trend-chart {
+  position: relative;
+  height: 11.5rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(180deg, var(--color-aurora-blue-soft), transparent 52%),
+    var(--color-surface-subtle);
+}
+
+.trend-chart__grid {
+  position: absolute;
+  inset: var(--space-5) var(--space-4) 2.35rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.trend-chart__grid i {
+  display: block;
+  width: 100%;
+  border-top: 1px dashed var(--color-border);
+}
+
+.trend-bars {
+  position: absolute;
+  inset: var(--space-4) var(--space-4) var(--space-3);
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+  align-items: end;
 }
 
-.trend-row {
+.trend-column {
   display: grid;
-  grid-template-columns: 2.75rem minmax(0, 1fr) 2rem;
-  gap: var(--space-3);
-  align-items: center;
+  height: 100%;
+  min-width: 0;
+  grid-template-rows: 1rem minmax(0, 1fr) 1rem;
+  justify-items: center;
+  align-items: end;
+  gap: var(--space-1);
 }
 
-.trend-row time,
-.trend-row__value {
+.trend-column strong,
+.trend-column time {
   color: var(--color-text-muted);
   font-family: var(--font-mono);
-  font-size: var(--font-size-caption);
+  font-size: .62rem;
+  line-height: 1;
 }
 
-.trend-row__value {
-  color: var(--color-text-secondary);
-  text-align: right;
+.trend-column__bar {
+  display: block;
+  width: min(1.5rem, 72%);
+  height: max(.2rem, var(--trend-height));
+  max-height: 100%;
+  border: 1px solid color-mix(in srgb, var(--color-cyan) 42%, transparent);
+  border-radius: .3rem .3rem .1rem .1rem;
+  background: var(--aurora-gradient);
+  box-shadow: 0 0 1rem var(--color-aurora-violet-soft);
+}
+
+.trend-empty-note {
+  margin: calc(var(--space-6) * -1) var(--space-4) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1.6;
 }
 
 .panel-state {
-  min-height: 17rem;
+  min-height: 23rem;
   align-content: center;
-  border-style: solid;
+  padding: var(--space-8) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
 }
 
 .panel-state--error {
-  border-color: var(--color-danger);
-  background: var(--color-danger-soft);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  background:
+    radial-gradient(circle at 50% 30%, var(--color-danger-soft), transparent 45%),
+    var(--color-surface-subtle);
+}
+
+.panel-state__signal {
+  display: grid;
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: var(--space-4);
+  place-items: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--aurora-gradient-soft);
 }
 
 .panel-state__icon {
-  margin-bottom: var(--space-4);
   color: var(--color-cyan);
-  font-size: 2rem;
+  font-size: 1.65rem;
 }
 
-.panel-state--error .panel-state__icon {
-  color: var(--color-danger);
-}
+.panel-state--error .panel-state__icon { color: var(--color-danger-text); }
 
 .panel-state h3 {
-  margin-bottom: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-primary);
   font-size: var(--font-size-component-title);
 }
 
 .panel-state p {
   max-width: 26rem;
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-5);
   color: var(--color-text-secondary);
+  line-height: 1.7;
 }
 
-@media (max-width: 420px) {
+.analytics-actions {
+  padding-top: var(--space-6);
+}
+
+.analytics-actions .el-button,
+.panel-state .el-button {
+  min-height: 44px;
+}
+
+@media (max-width: 480px) {
+  .analytics-section {
+    padding-bottom: var(--space-6);
+  }
+
   .metric-grid {
+    margin-inline: calc(var(--space-2) * -1);
+  }
+
+  .metric-item {
+    gap: var(--space-2);
+    padding-inline: var(--space-2);
+  }
+
+  .metric-item span {
+    font-size: .7rem;
+  }
+
+  .metric-value {
+    font-size: 1.3rem;
+  }
+
+  .feedback-summary {
     grid-template-columns: 1fr;
   }
 
-  .metric-card {
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
+  .feedback-breakdown {
+    grid-template-columns: 1fr;
   }
 
-  .metric-card span {
-    text-align: right;
+  .trend-chart {
+    height: 10.5rem;
+  }
+
+  .trend-bars {
+    gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .feedback-summary,
+  .trend-chart,
+  .panel-state--error {
+    background: var(--color-surface-subtle);
   }
 }
 </style>

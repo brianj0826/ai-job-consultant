@@ -123,6 +123,16 @@ describe('ChatWindow', () => {
     wrapper.unmount()
   })
 
+  it('opens the existing knowledge upload without submitting the composer form', async () => {
+    const wrapper = mountChat()
+
+    await wrapper.get('button[title="从知识库上传文档"]').trigger('click')
+
+    expect(wrapper.emitted('request-document-upload')).toHaveLength(1)
+    expect(apiMocks.streamMessage).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('delays the session skeleton, renders errors, and emits retry-session', async () => {
     const wrapper = mountChat({
       sessionStatus: 'loading',

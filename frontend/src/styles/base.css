@@ -22,8 +22,8 @@ body {
   margin: 0;
   overflow-x: hidden;
   background:
-    radial-gradient(circle at 10% -10%, rgb(109 93 251 / 9%), transparent 30rem),
-    radial-gradient(circle at 95% 0%, rgb(25 195 230 / 7%), transparent 26rem),
+    radial-gradient(circle at 10% -10%, var(--color-aurora-violet-soft), transparent 30rem),
+    radial-gradient(circle at 95% 0%, var(--color-aurora-cyan-soft), transparent 26rem),
     var(--color-canvas);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
@@ -55,7 +55,7 @@ button {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
@@ -135,7 +135,9 @@ li {
   color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
-  letter-spacing: .06em;
+  font-weight: 600;
+  letter-spacing: .1em;
+  line-height: var(--line-height-caption);
   text-transform: uppercase;
 }
 
@@ -144,6 +146,27 @@ li {
   background: var(--color-surface-glass);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.precision-orbit {
+  position: absolute;
+  border: 1px solid var(--color-orbit);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.precision-orbit::before,
+.precision-orbit::after {
+  position: absolute;
+  border: 1px solid var(--color-orbit);
+  border-radius: inherit;
+  content: "";
+  inset: 14%;
+}
+
+.precision-orbit::after {
+  border-style: dashed;
+  inset: 31%;
 }
 
 .aurora-border {

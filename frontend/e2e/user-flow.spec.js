@@ -85,6 +85,10 @@ test.describe('normal user browser flow', () => {
     await page.goto('/admin')
     await expect(page).toHaveURL(/\/forbidden$/)
     await expect(page.getByTestId('forbidden-page')).toContainText('无权访问此页面')
+
+    await page.getByRole('button', { name: '返回职业工作台' }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: '职业工作台' })).toBeVisible()
   })
 
   test('forces a reset user to change the temporary password before entering the workspace', async ({ page }) => {

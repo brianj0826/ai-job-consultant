@@ -1,7 +1,11 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
-const renderMarkdown = vi.hoisted(() => vi.fn((text) => `<p>${text}</p>`))
+const renderMarkdown = vi.hoisted(() => vi.fn((text) => (
+  text === '可滚动内容'
+    ? '<pre><code>long output</code></pre><table><tbody><tr><td>A</td></tr></tbody></table>'
+    : `<p>${text}</p>`
+)))
 
 vi.mock('marked', () => ({ marked: renderMarkdown }))
 
@@ -55,5 +59,21 @@ describe('MessageBubble', () => {
 
     await wrapper.get('.inline-interruption button').trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
+  })
+
+  it('makes generated code and tables keyboard reachable', () => {
+    const wrapper = mount(MessageBubble, {
+      props: { message: { role: 'assistant', content: '可滚动内容' } },
+      global: { stubs: globalStubs }
+    })
+
+    expect(wrapper.get('.message-content pre').attributes()).toMatchObject({
+      tabindex: '0',
+      'aria-label': '代码块，可横向滚动'
+    })
+    expect(wrapper.get('.message-content table').attributes()).toMatchObject({
+      tabindex: '0',
+      'aria-label': '数据表格，可横向滚动'
+    })
   })
 })
