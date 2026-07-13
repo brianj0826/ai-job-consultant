@@ -1,13 +1,31 @@
 """Authenticated CRUD endpoints for the structured career workspace."""
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from backend.schemas.career import (
+    ApplicationCreate,
+    ApplicationUpdate,
+    CareerSuggestionDecision,
+    CareerSuggestionRevision,
+    InterviewCreate,
+    InterviewUpdate,
+    JobCreate,
+    JobUpdate,
+    QuestionCreate,
+    QuestionUpdate,
+    ReportCreate,
+    ReportUpdate,
+    ResumeCreate,
+    ResumeUpdate,
+    SkillCreate,
+    SkillUpdate,
+)
 from backend.services import career as career_service
+from backend.services import career_suggestions as suggestion_service
 from backend.services.access import current_user_id
 from backend.services.auth import require_business_csrf, require_current_user
 
@@ -37,120 +55,6 @@ def _call(operation, *args, **kwargs):
         raise HTTPException(status_code=409, detail=str(error)) from error
     except career_service.CareerDataError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-class ResumeCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    target_role: str = Field(default="", max_length=255)
-    content: str = Field(min_length=1, max_length=200_000)
-    source_name: Optional[str] = Field(default=None, max_length=512)
-    is_primary: bool = False
-
-
-class ResumeUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    target_role: Optional[str] = Field(default=None, max_length=255)
-    content: Optional[str] = Field(default=None, min_length=1, max_length=200_000)
-    source_name: Optional[str] = Field(default=None, max_length=512)
-    is_primary: Optional[bool] = None
-
-
-class JobCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    company: str = Field(default="", max_length=255)
-    description: str = Field(min_length=1, max_length=200_000)
-    source_url: Optional[str] = Field(default=None, max_length=2048)
-    status: str = Field(default="saved", max_length=32)
-
-
-class JobUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    company: Optional[str] = Field(default=None, max_length=255)
-    description: Optional[str] = Field(default=None, min_length=1, max_length=200_000)
-    source_url: Optional[str] = Field(default=None, max_length=2048)
-    status: Optional[str] = Field(default=None, max_length=32)
-
-
-class ApplicationCreate(BaseModel):
-    job_id: int = Field(gt=0)
-    stage: str = Field(default="saved", max_length=32)
-    next_action: str = Field(default="", max_length=500)
-    deadline: Optional[date] = None
-    notes: str = Field(default="", max_length=20_000)
-
-
-class ApplicationUpdate(BaseModel):
-    job_id: Optional[int] = Field(default=None, gt=0)
-    stage: Optional[str] = Field(default=None, max_length=32)
-    next_action: Optional[str] = Field(default=None, max_length=500)
-    deadline: Optional[date] = None
-    notes: Optional[str] = Field(default=None, max_length=20_000)
-
-
-class InterviewCreate(BaseModel):
-    job_id: Optional[int] = Field(default=None, gt=0)
-    title: str = Field(min_length=1, max_length=255)
-    status: str = Field(default="planned", max_length=32)
-    overall_score: Optional[float] = Field(default=None, ge=0, le=100)
-
-
-class InterviewUpdate(BaseModel):
-    job_id: Optional[int] = Field(default=None, gt=0)
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    status: Optional[str] = Field(default=None, max_length=32)
-    overall_score: Optional[float] = Field(default=None, ge=0, le=100)
-
-
-class QuestionCreate(BaseModel):
-    position: Optional[int] = Field(default=None, ge=1, le=500)
-    question: str = Field(min_length=1, max_length=10_000)
-    answer: str = Field(default="", max_length=50_000)
-    score: Optional[float] = Field(default=None, ge=0, le=100)
-    feedback: str = Field(default="", max_length=20_000)
-
-
-class QuestionUpdate(BaseModel):
-    position: Optional[int] = Field(default=None, ge=1, le=500)
-    question: Optional[str] = Field(default=None, min_length=1, max_length=10_000)
-    answer: Optional[str] = Field(default=None, max_length=50_000)
-    score: Optional[float] = Field(default=None, ge=0, le=100)
-    feedback: Optional[str] = Field(default=None, max_length=20_000)
-
-
-class ReportCreate(BaseModel):
-    kind: str = Field(max_length=32)
-    title: str = Field(min_length=1, max_length=255)
-    entity_type: Optional[str] = Field(default=None, max_length=32)
-    entity_id: Optional[int] = Field(default=None, gt=0)
-    summary: str = Field(min_length=1, max_length=200_000)
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class ReportUpdate(BaseModel):
-    kind: Optional[str] = Field(default=None, max_length=32)
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    entity_type: Optional[str] = Field(default=None, max_length=32)
-    entity_id: Optional[int] = Field(default=None, gt=0)
-    summary: Optional[str] = Field(default=None, min_length=1, max_length=200_000)
-    payload: Optional[dict[str, Any]] = None
-
-
-class SkillCreate(BaseModel):
-    skill: str = Field(min_length=1, max_length=255)
-    target_level: str = Field(default="", max_length=255)
-    status: str = Field(default="planned", max_length=32)
-    progress: int = Field(default=0, ge=0, le=100)
-    due_date: Optional[date] = None
-    notes: str = Field(default="", max_length=20_000)
-
-
-class SkillUpdate(BaseModel):
-    skill: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    target_level: Optional[str] = Field(default=None, max_length=255)
-    status: Optional[str] = Field(default=None, max_length=32)
-    progress: Optional[int] = Field(default=None, ge=0, le=100)
-    due_date: Optional[date] = None
-    notes: Optional[str] = Field(default=None, max_length=20_000)
 
 
 class DeleteCareerDataRequest(BaseModel):
@@ -366,6 +270,64 @@ def update_skill(skill_id: int, payload: SkillUpdate, current_user: dict = Depen
 def delete_skill(skill_id: int, current_user: dict = Depends(require_current_user)):
     _call(career_service.delete_skill, _uid(current_user), skill_id)
     return {"ok": True}
+
+
+# AI suggestions
+@router.patch("/suggestions/{suggestion_id}", dependencies=CAREER_WRITE_DEPENDENCIES)
+def revise_suggestion(
+    suggestion_id: int,
+    payload: CareerSuggestionRevision,
+    current_user: dict = Depends(require_current_user),
+):
+    return _call(
+        suggestion_service.revise_suggestion,
+        _uid(current_user),
+        suggestion_id,
+        payload.revision,
+        payload.payload,
+    )
+
+
+@router.post("/suggestions/{suggestion_id}/accept", dependencies=CAREER_WRITE_DEPENDENCIES)
+def accept_suggestion(
+    suggestion_id: int,
+    payload: CareerSuggestionDecision,
+    current_user: dict = Depends(require_current_user),
+):
+    return _call(
+        suggestion_service.accept_suggestion,
+        _uid(current_user),
+        suggestion_id,
+        payload.revision,
+    )
+
+
+@router.post("/suggestions/{suggestion_id}/dismiss", dependencies=CAREER_WRITE_DEPENDENCIES)
+def dismiss_suggestion(
+    suggestion_id: int,
+    payload: CareerSuggestionDecision,
+    current_user: dict = Depends(require_current_user),
+):
+    return _call(
+        suggestion_service.dismiss_suggestion,
+        _uid(current_user),
+        suggestion_id,
+        payload.revision,
+    )
+
+
+@router.post("/suggestions/{suggestion_id}/restore", dependencies=CAREER_WRITE_DEPENDENCIES)
+def restore_suggestion(
+    suggestion_id: int,
+    payload: CareerSuggestionDecision,
+    current_user: dict = Depends(require_current_user),
+):
+    return _call(
+        suggestion_service.restore_suggestion,
+        _uid(current_user),
+        suggestion_id,
+        payload.revision,
+    )
 
 
 @router.get("/export", dependencies=[Depends(require_career_data_guard)])

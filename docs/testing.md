@@ -102,6 +102,7 @@ docker compose --env-file .env.example \
 - 文档安全：扩展名、字节、PDF 页数、提取文本、分块上限；失败时不应留下部分向量。
 - 抓取安全：localhost、IPv4/IPv6 私网、link-local、云 metadata、DNS 解析到内网、重定向转内网、超大 Content-Length、无长度超大流、重定向过多、每用户限流。
 - 聊天：输入校验、429、同 ID 回放/冲突/处理中、租约接管、SSE token/done/error、客户端断开后的记录一致性。
+- AI 职业建议：明确保存与高置信触发、低置信抑制、最多三条、坏结构/超时降级、七类 payload、草稿 revision、忽略/恢复、原子接受、重复确认幂等、跨用户隔离、历史恢复、导出与清空。
 - 恢复：MySQL 与 Chroma 同批备份在隔离环境恢复，职业记录数量和知识库来源一致。
 - UI：375、768、1024、1440px；键盘导航、焦点、加载/空/错误/重试、Reduced Motion。
 

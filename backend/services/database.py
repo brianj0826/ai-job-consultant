@@ -339,7 +339,7 @@ def check_database_readiness() -> dict[str, str]:
         },
         "career_interview_questions": {
             "id", "interview_id", "position", "question", "answer", "score",
-            "feedback", "created_at", "updated_at",
+            "feedback", "reference_answer", "coaching_notes", "created_at", "updated_at",
         },
         "career_reports": {
             "id", "user_id", "kind", "title", "entity_type", "entity_id",
@@ -348,6 +348,12 @@ def check_database_readiness() -> dict[str, str]:
         "career_skills": {
             "id", "user_id", "skill", "target_level", "status", "progress",
             "due_date", "notes", "created_at", "updated_at",
+        },
+        "career_suggestions": {
+            "id", "user_id", "session_id", "assistant_message_id", "action",
+            "resource_type", "title", "reason", "payload", "relation_hints",
+            "payload_hash", "revision", "status", "result_resource_type",
+            "result_resource_ids", "decided_at", "created_at", "updated_at",
         },
     }
     conn = get_connection()
@@ -696,7 +702,15 @@ def rename_session(session_id, new_name):
         conn.close()
 
 
-def save_message(user_id, session_id, role, content, client_request_id: Optional[str] = None):
+def save_message(
+    user_id,
+    session_id,
+    role,
+    content,
+    client_request_id: Optional[str] = None,
+    *,
+    suggestions: Optional[list[dict[str, Any]]] = None,
+):
     """Persist a message; request IDs make user/assistant retries idempotent."""
     conn = get_connection()
     try:
@@ -708,6 +722,16 @@ def save_message(user_id, session_id, role, content, client_request_id: Optional
                 (user_id, session_id, role, content, client_request_id),
             )
             message_id = cursor.lastrowid
+            if role == "assistant" and suggestions:
+                from backend.services.career_suggestions import insert_suggestions_with_cursor
+
+                insert_suggestions_with_cursor(
+                    cursor,
+                    int(user_id),
+                    int(session_id),
+                    int(message_id),
+                    suggestions,
+                )
         conn.commit()
         return message_id
     except Exception:
@@ -1001,6 +1025,8 @@ def complete_chat_request(
     client_request_id: str,
     owner_token: str,
     content: str,
+    *,
+    suggestions: Optional[list[dict[str, Any]]] = None,
 ) -> int:
     """Atomically save the assistant response if and only if this owner is current."""
     conn = get_connection()
@@ -1041,6 +1067,16 @@ def complete_chat_request(
                 if not existing:
                     raise
                 message_id = existing["id"]
+            if suggestions:
+                from backend.services.career_suggestions import insert_suggestions_with_cursor
+
+                insert_suggestions_with_cursor(
+                    cursor,
+                    int(user_id),
+                    int(session_id),
+                    int(message_id),
+                    suggestions,
+                )
             cursor.execute(
                 """UPDATE chat_requests
                    SET status = 'completed', response_message_id = %s,

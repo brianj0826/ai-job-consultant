@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import logging
+import re
 from collections.abc import Iterable
 
 from backend.services.database import get_connection
@@ -151,8 +152,54 @@ CAREER_SCHEMA_V1 = (
 )
 
 
+CAREER_SUGGESTIONS_V2 = (
+    """
+    ALTER TABLE career_interview_questions
+        ADD COLUMN reference_answer MEDIUMTEXT NULL DEFAULT NULL AFTER feedback
+    """,
+    """
+    ALTER TABLE career_interview_questions
+        ADD COLUMN coaching_notes MEDIUMTEXT NULL DEFAULT NULL AFTER reference_answer
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS career_suggestions (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        session_id INT NOT NULL,
+        assistant_message_id INT NOT NULL,
+        action VARCHAR(16) NOT NULL DEFAULT 'create',
+        resource_type VARCHAR(32) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        reason VARCHAR(1000) NOT NULL DEFAULT '',
+        payload JSON NOT NULL,
+        relation_hints JSON NOT NULL,
+        payload_hash CHAR(64) NOT NULL,
+        revision INT NOT NULL DEFAULT 1,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending',
+        result_resource_type VARCHAR(32) NULL DEFAULT NULL,
+        result_resource_ids JSON NULL DEFAULT NULL,
+        decided_at DATETIME NULL DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_career_suggestions_message_payload (
+            assistant_message_id, resource_type, payload_hash
+        ),
+        KEY idx_career_suggestions_user_status_created (user_id, status, created_at),
+        KEY idx_career_suggestions_session_message (session_id, assistant_message_id),
+        CONSTRAINT fk_career_suggestions_user
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT fk_career_suggestions_session
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+        CONSTRAINT fk_career_suggestions_message
+            FOREIGN KEY (assistant_message_id) REFERENCES messages(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+)
+
+
 MIGRATIONS: tuple[tuple[int, str, Iterable[str]], ...] = (
     (1, "structured-career-workspace", CAREER_SCHEMA_V1),
+    (2, "ai-career-suggestions", CAREER_SUGGESTIONS_V2),
 )
 
 
@@ -166,6 +213,28 @@ def migration_checksum(statements: Iterable[str]) -> str:
         for statement in statements
     )
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+_ADD_COLUMN_PATTERN = re.compile(
+    r"^\s*ALTER\s+TABLE\s+`?([A-Za-z0-9_]+)`?\s+ADD\s+COLUMN\s+`?([A-Za-z0-9_]+)`?",
+    flags=re.IGNORECASE,
+)
+
+
+def _execute_migration_statement(cursor, statement: str) -> None:
+    """Execute one statement, safely resuming individually committed ADD COLUMN DDL."""
+    match = _ADD_COLUMN_PATTERN.match(statement)
+    if match:
+        table_name, column_name = match.groups()
+        cursor.execute(
+            """SELECT 1 AS present FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = %s AND COLUMN_NAME = %s LIMIT 1""",
+            (table_name, column_name),
+        )
+        if cursor.fetchone():
+            return
+    cursor.execute(statement)
 
 
 @contextmanager
@@ -231,7 +300,7 @@ def run_migrations(*, acquire_lock: bool = True) -> list[int]:
                     continue
                 logger.info("Applying database migration %s: %s", version, name)
                 for statement in statements:
-                    cursor.execute(statement)
+                    _execute_migration_statement(cursor, statement)
                 cursor.execute(
                     "INSERT INTO schema_migrations (version, name, checksum) VALUES (%s, %s, %s)",
                     (version, name, checksum),

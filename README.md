@@ -51,6 +51,7 @@ docker compose ps
 | --- | --- |
 | [架构说明](docs/architecture.md) | 分层、数据流、存储边界与扩展规则 |
 | [用户指南](docs/user-guide.md) | 从注册到简历、岗位、投递、面试和数据管理 |
+| [AI 职业数据建议](docs/ai-suggestions.md) | 对话建议卡、确认写入、状态与安全边界 |
 | [管理员指南](docs/admin-guide.md) | 管理员初始化、角色、账号与审计 |
 | [API 说明](docs/api.md) | 认证、CSRF、SSE、MCP 与职业中心接口 |
 | [配置参考](docs/configuration.md) | 全部环境变量、默认值与生产要求 |

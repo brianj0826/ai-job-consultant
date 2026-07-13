@@ -10,6 +10,7 @@ from backend.services.database import (
     get_user_sessions,
     rename_session,
 )
+from backend.services.career_suggestions import get_suggestions_for_messages
 
 
 router = APIRouter()
@@ -56,6 +57,11 @@ def get_messages(
 ):
     require_owned_session(session_id, current_user)
     messages = get_session_messages(session_id, limit)
+    user_id = current_user_id(current_user)
+    suggestions_by_message = get_suggestions_for_messages(
+        user_id,
+        [message[0] for message in messages if message[1] == "assistant"],
+    )
     return [
         {
             "id": message[0],
@@ -63,6 +69,7 @@ def get_messages(
             "content": message[2],
             "feedback": message[3],
             "timestamp": _fmt_ts(message[4]),
+            "suggestions": suggestions_by_message.get(message[0], []),
         }
         for message in messages
     ]

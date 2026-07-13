@@ -107,13 +107,13 @@ test('Docker stack connects the Vue UI, FastAPI, MySQL, Redis and mocked AI prov
   const streamRequestPromise = page.waitForRequest((request) => (
     request.method() === 'POST' && request.url().endsWith('/api/chat/stream')
   ))
-  await composer.fill('Run the Docker integration smoke test')
+  await composer.fill('Please save a Redis skill plan from this Docker integration test')
   await page.getByRole('button', { name: '发送消息' }).click()
 
   const streamRequest = await streamRequestPromise
   expect(await streamRequest.headerValue('x-csrf-token')).toBeTruthy()
   expect(streamRequest.postDataJSON()).toEqual({
-    message: 'Run the Docker integration smoke test',
+    message: 'Please save a Redis skill plan from this Docker integration test',
     session_id: expect.any(Number),
     client_request_id: expect.any(String)
   })
@@ -121,6 +121,56 @@ test('Docker stack connects the Vue UI, FastAPI, MySQL, Redis and mocked AI prov
   await expect(
     page.getByLabel('AI 求职顾问对话').getByText('Docker mock reply')
   ).toBeVisible()
+
+  const redisCard = page.locator('.suggestion-card').filter({ hasText: 'Redis' }).last()
+  await expect(redisCard).toBeVisible()
+
+  const beforeSuggestionExport = await (await page.request.get('/api/career/export')).json()
+  expect(beforeSuggestionExport.skills.filter((item) => item.skill === 'Redis')).toHaveLength(0)
+
+  await redisCard.getByRole('button', { name: '编辑' }).click()
+  const editor = page.getByRole('dialog', { name: /Redis|编辑技能计划建议/ })
+  await expect(editor).toBeVisible()
+  await editor.getByLabel('目标水平').fill('能独立设计缓存、限流和缓存穿透防护')
+  await editor.getByRole('button', { name: '保存草稿' }).click()
+  await expect(editor).toBeHidden()
+
+  const stillPendingExport = await (await page.request.get('/api/career/export')).json()
+  expect(stillPendingExport.skills.filter((item) => item.skill === 'Redis')).toHaveLength(0)
+
+  await redisCard.getByRole('button', { name: '确认添加' }).click()
+  await expect(redisCard).toContainText('已添加到技能计划')
+
+  const acceptedExport = await (await page.request.get('/api/career/export')).json()
+  const redisSkills = acceptedExport.skills.filter((item) => item.skill === 'Redis')
+  expect(redisSkills).toHaveLength(1)
+  expect(redisSkills[0]).toMatchObject({
+    target_level: '能独立设计缓存、限流和缓存穿透防护',
+    status: 'planned',
+    progress: 0
+  })
+
+  const chatSessionId = streamRequest.postDataJSON().session_id
+  const historyResponse = await page.request.get(`/api/sessions/${chatSessionId}/messages`)
+  expect(historyResponse.status()).toBe(200)
+  const historyMessages = await historyResponse.json()
+  const acceptedSuggestion = historyMessages
+    .flatMap((message) => message.suggestions || [])
+    .find((suggestion) => suggestion.resource_type === 'skills' && suggestion.payload?.skill === 'Redis')
+  expect(acceptedSuggestion).toMatchObject({ status: 'accepted', revision: 3 })
+
+  const replayAccept = await page.request.post(
+    `/api/career/suggestions/${acceptedSuggestion.id}/accept`,
+    write({ revision: acceptedSuggestion.revision })
+  )
+  expect(replayAccept.status()).toBe(200)
+  const replayExport = await (await page.request.get('/api/career/export')).json()
+  expect(replayExport.skills.filter((item) => item.skill === 'Redis')).toHaveLength(1)
+
+  await page.reload()
+  await page.getByRole('button', { name: /继续职业对话/ }).click()
+  const restoredCard = page.locator('.suggestion-card').filter({ hasText: 'Redis' }).last()
+  await expect(restoredCard).toContainText('已添加到技能计划')
 
   const clearResponse = await page.request.delete(
     '/api/career/data',

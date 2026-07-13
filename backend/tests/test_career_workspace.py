@@ -362,14 +362,16 @@ def test_versioned_migration_records_structured_workspace(monkeypatch):
 
     applied = migrations.run_migrations()
 
-    assert applied == [1]
-    assert connection.commits == 1
+    assert applied == [1, 2]
+    assert connection.commits == 2
     assert connection.rollbacks == 0
     assert connection.closed
     sql = "\n".join(statement for statement, _ in connection.cursor_instance.executions)
     assert "CREATE TABLE IF NOT EXISTS schema_migrations" in sql
     assert "CREATE TABLE IF NOT EXISTS career_resumes" in sql
     assert "CREATE TABLE IF NOT EXISTS career_interviews" in sql
+    assert "CREATE TABLE IF NOT EXISTS career_suggestions" in sql
+    assert "ADD COLUMN reference_answer" in sql
     assert "INSERT INTO schema_migrations" in sql
 
 
@@ -384,10 +386,10 @@ def test_migration_is_idempotent_when_recorded_checksum_matches(monkeypatch):
 
     monkeypatch.setattr(migrations, "get_connection", connection_factory)
 
-    assert migrations.run_migrations() == [1]
+    assert migrations.run_migrations() == [1, 2]
     assert migrations.run_migrations() == []
 
-    assert len(ledger) == 1
+    assert len(ledger) == 2
     second_sql = "\n".join(
         statement for statement, _ in connections[1].cursor_instance.executions
     )
@@ -406,7 +408,7 @@ def test_migration_rejects_checksum_mismatch(monkeypatch):
         return connection
 
     monkeypatch.setattr(migrations, "get_connection", connection_factory)
-    assert migrations.run_migrations() == [1]
+    assert migrations.run_migrations() == [1, 2]
     assert "checksum" in ledger[0], "migration ledger must record a checksum"
     ledger[0]["checksum"] = "0" * 64
 

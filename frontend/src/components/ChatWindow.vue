@@ -74,10 +74,16 @@
           <MessageBubble
             v-for="(message, index) in visibleMessages"
             :key="messageKey(message, index)"
-            v-memo="[message.content, message.feedback, currentFeedback(message)]"
+            v-memo="[
+              message.content,
+              message.feedback,
+              currentFeedback(message),
+              suggestionVersion(message)
+            ]"
             :message="message"
             :feedback-value="currentFeedback(message)"
             @feedback="feedback"
+            @suggestion-update="handleSuggestionUpdate"
           />
 
           <MessageBubble
@@ -218,7 +224,13 @@ const props = defineProps({
   sessionError: { type: String, default: '' }
 })
 
-const emit = defineEmits(['send-message', 'kb-updated', 'retry-session', 'request-document-upload'])
+const emit = defineEmits([
+  'send-message',
+  'kb-updated',
+  'retry-session',
+  'request-document-upload',
+  'suggestion-update'
+])
 
 const input = ref('')
 const msgListRef = ref(null)
@@ -295,6 +307,18 @@ const emptyStateDescription = computed(() => (
 const messageKey = (message, index) => (
   message._clientKey || message.id || `${message.role}-${message.timestamp || index}-${index}`
 )
+
+const suggestionVersion = (message) => (message.suggestions || [])
+  .map((suggestion) => `${suggestion.id}:${suggestion.status}:${suggestion.revision}`)
+  .join('|')
+
+const handleSuggestionUpdate = (messageId, suggestion) => {
+  emit('suggestion-update', {
+    sessionId: props.sessionId,
+    messageId,
+    suggestion
+  })
+}
 
 const requestFrame = (callback) => (
   typeof window.requestAnimationFrame === 'function'
@@ -492,6 +516,7 @@ const requestReply = async (text, shouldEmitUser, reuseBubble, clientRequestId) 
       content: finalText,
       id: finalData.msg_id || null,
       sources: finalData.sources || [],
+      suggestions: Array.isArray(finalData.suggestions) ? finalData.suggestions : [],
       timestamp: new Date().toISOString(),
       _clientKey: activeStreamKey.value
     }

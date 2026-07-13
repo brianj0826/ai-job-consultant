@@ -58,10 +58,12 @@ def test_stream_buffers_complete_response_before_moderation_and_emission(monkeyp
 
     monkeypatch.setattr(chat_router, "get_ai_response_stream", model_stream)
     monkeypatch.setattr(chat_router, "moderate_text", moderate)
+    monkeypatch.setattr(chat_router, "extract_career_suggestions", lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_router, "_message_suggestions", lambda *args: [])
     monkeypatch.setattr(
         chat_router,
         "_complete_request",
-        lambda *args: saved.append(args[-1]) or 42,
+        lambda *args: saved.append(args[4]) or 42,
     )
 
     payloads = _payloads(list(chat_router._stream_events([], [], 7, 3, None, None)))
@@ -85,8 +87,14 @@ def test_unsafe_stream_content_is_never_emitted_or_persisted(monkeypatch):
     )
     monkeypatch.setattr(
         chat_router,
+        "extract_career_suggestions",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("extractor called")),
+    )
+    monkeypatch.setattr(chat_router, "_message_suggestions", lambda *args: [])
+    monkeypatch.setattr(
+        chat_router,
         "_complete_request",
-        lambda *args: saved.append(args[-1]) or 43,
+        lambda *args: saved.append(args[4]) or 43,
     )
 
     payloads = _payloads(list(chat_router._stream_events([], [], 7, 3, None, None)))
@@ -106,6 +114,12 @@ def test_unsafe_partial_response_is_audited_after_upstream_failure(monkeypatch):
 
     monkeypatch.setattr(chat_router, "get_ai_response_stream", interrupted_stream)
     monkeypatch.setattr(chat_router, "moderate_text", lambda *args: (False, "blocked"))
+    monkeypatch.setattr(
+        chat_router,
+        "extract_career_suggestions",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("extractor called")),
+    )
+    monkeypatch.setattr(chat_router, "_message_suggestions", lambda *args: [])
     monkeypatch.setattr(
         chat_router,
         "_complete_request",

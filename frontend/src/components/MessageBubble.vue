@@ -47,6 +47,19 @@
         </div>
       </article>
 
+      <section
+        v-if="!isUser && !streaming && !interrupted && message.suggestions?.length"
+        class="career-suggestions"
+        aria-label="AI 职业数据建议"
+      >
+        <CareerSuggestionCard
+          v-for="suggestion in message.suggestions"
+          :key="suggestion.id"
+          :suggestion="suggestion"
+          @update="emit('suggestion-update', message.id, $event)"
+        />
+      </section>
+
       <p v-if="streaming" class="streaming-status" aria-hidden="true">
         <span class="streaming-pulse"></span>
         正在生成回复
@@ -132,6 +145,7 @@ import {
   renderAccessibleHtml,
   renderAccessibleMarkdown
 } from '../utils/markdownAccessibility'
+import CareerSuggestionCard from './CareerSuggestionCard.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -142,7 +156,7 @@ const props = defineProps({
   feedbackValue: { type: String, default: null }
 })
 
-const emit = defineEmits(['feedback', 'retry'])
+const emit = defineEmits(['feedback', 'retry', 'suggestion-update'])
 
 const isUser = computed(() => props.message.role === 'user')
 const isWebUrl = (value) => value && /^(https?:\/\/)/i.test(value)
@@ -218,6 +232,11 @@ const formattedTimestamp = computed(() => {
   position: relative;
   min-width: 0;
   flex: 1;
+}
+
+.career-suggestions {
+  display: grid;
+  gap: var(--space-3);
 }
 
 .assistant-heading {

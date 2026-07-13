@@ -122,12 +122,12 @@ X-CSRF-Token: <csrf_token-cookie-value>
 
 `client_request_id` 可省略，但客户端应为一次逻辑发送生成 1–128 字符的稳定 ID，并在网络重试时复用。相同 ID 与不同内容返回 `409`；处理中返回 `409` 和 `Retry-After: 2`；完成后重试会回放结果。
 
-非流式响应包含 `response`、`msg_id` 与 `sources`。SSE 使用无命名的 `data:` 事件，每个 data 是 JSON：
+非流式响应包含 `response`、`msg_id`、`sources` 与 `suggestions`。会话历史中的 assistant 消息也包含同一建议数组。SSE 使用无命名的 `data:` 事件，每个 data 是 JSON：
 
 ```text
 data: {"token":"逐步输出的文本"}
 
-data: {"done":true,"msg_id":123,"sources":[{"id":1,"source":"resume.pdf","title":"resume.pdf"}]}
+data: {"done":true,"msg_id":123,"sources":[{"id":1,"source":"resume.pdf","title":"resume.pdf"}],"suggestions":[]}
 ```
 
 失败可能在 HTTP 200 后出现：
@@ -137,6 +137,21 @@ data: {"error":"错误说明"}
 ```
 
 客户端必须缓冲 token，在 `done` 后保存最终状态，在 `error` 或断流时提供可重试状态。服务端为了统一输出审核，会先收完整模型回复再发送已批准 token，所以不要把较长的首 token 等待误判为断流。代理仍需关闭 SSE buffering 并配置足够读取超时。
+
+### AI 职业建议
+
+建议对象包含 `id`、`action=create`、`resource_type`、`title`、`reason`、`payload`、`relation_hints`、`status`、`revision`、`source_message_id`、时间与可选 `created_resource`。支持 `resumes`、`jobs`、`applications`、`interviews`、`reports`、`skills` 和 `interview_questions`。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| PATCH | `/career/suggestions/{id}` | `{revision,payload}`；保存待确认草稿并增加 revision |
+| POST | `/career/suggestions/{id}/accept` | `{revision}`；复验并原子创建目标记录 |
+| POST | `/career/suggestions/{id}/dismiss` | `{revision}`；忽略建议 |
+| POST | `/career/suggestions/{id}/restore` | `{revision}`；恢复已忽略建议 |
+
+所有写请求需要 Cookie、CSRF 与当前用户职业数据锁。客户端不能更改建议的 `user_id`、`resource_type` 或 `action`。其他用户的建议表现为 `404`；旧 revision、非法状态、关系失效或唯一性冲突返回 `409`。重复接受返回第一次创建的结果，不会重复创建。
+
+面试题建议批次最多十题，使用 `reference_answer` 和 `coaching_notes` 保存 AI 示例；真实 `answer`、`feedback` 和 `score` 保持为空。详细行为见 [AI 职业数据建议](ai-suggestions.md)。
 
 ## 文档与 RAG
 

@@ -18,8 +18,11 @@ from backend.services.database import (
     reserve_chat_request,
     save_message,
 )
+from backend.services import career as career_service
+from backend.services import career_suggestions as suggestion_service
 from backend.services.rag import search_document, build_rag_context
 from backend.services.deepseek_api import get_ai_response, get_ai_response_with_tools, get_ai_response_stream
+from backend.services.suggestion_extractor import extract_career_suggestions
 from backend.services.memory import trim_history, generate_summary
 from backend.services.tools import TOOLS, execute_tool
 from backend.services.security import moderate_text, check_rate_limit, sanitize_input
@@ -111,18 +114,86 @@ def _complete_request(
     client_request_id: Optional[str],
     owner_token: Optional[str],
     content: str,
+    suggestions: Optional[list[dict]] = None,
 ) -> int:
-    if client_request_id:
-        if not owner_token:
-            raise ChatRequestOwnershipError("Missing chat request owner")
-        return complete_chat_request(
+    def persist(persisted_suggestions: Optional[list[dict]]) -> int:
+        if client_request_id:
+            if not owner_token:
+                raise ChatRequestOwnershipError("Missing chat request owner")
+            return complete_chat_request(
+                user_id,
+                session_id,
+                client_request_id,
+                owner_token,
+                content,
+                suggestions=persisted_suggestions,
+            )
+        return save_message(
             user_id,
             session_id,
-            client_request_id,
-            owner_token,
+            "assistant",
             content,
+            suggestions=persisted_suggestions,
         )
-    return save_message(user_id, session_id, "assistant", content)
+
+    # Suggestion metadata follows the same privacy lifecycle as career data.
+    # Lock before opening the chat completion transaction so a concurrent clear
+    # cannot commit first and then be followed by a late sensitive draft insert.
+    if suggestions:
+        try:
+            with career_service.career_data_guard(user_id):
+                return persist(suggestions)
+        except career_service.CareerConflictError as error:
+            # A busy export/clear must not turn an optional suggestion into a
+            # failed chat. Save the audited answer atomically without drafts.
+            logger.warning(
+                "Career suggestion persistence skipped error=%s",
+                type(error).__name__,
+            )
+            return persist([])
+    return persist(None)
+
+
+def _message_suggestions(user_id: int, message_id: int) -> list[dict]:
+    """Suggestion display is optional and must never make chat unavailable."""
+    try:
+        return suggestion_service.get_message_suggestions(user_id, message_id)
+    except Exception as error:
+        logger.warning(
+            "Could not load career suggestions error=%s",
+            type(error).__name__,
+        )
+        return []
+
+
+def _latest_user_content(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user" and isinstance(message.get("content"), str):
+            return message["content"]
+    return ""
+
+
+def _extract_suggestion_drafts(
+    user_id: int,
+    user_message: str,
+    assistant_response: str,
+    recent_messages: list[dict],
+) -> list[dict]:
+    try:
+        return extract_career_suggestions(
+            user_id,
+            user_message,
+            assistant_response,
+            recent_messages=recent_messages,
+        )
+    except Exception as error:
+        # The feature is deliberately best-effort. Never trade a completed
+        # answer for an optional suggestion card.
+        logger.warning(
+            "Career suggestion extraction escaped its safety boundary error=%s",
+            type(error).__name__,
+        )
+        return []
 
 
 def _complete_nonstream_chat(
@@ -202,16 +273,26 @@ def _complete_nonstream_chat(
     is_safe, reason = moderate_text(response_text, user_id)
     if not is_safe:
         response_text = f"[系统提示] 回复内容已被安全策略拦截（{reason}），请重新提问。"
+    suggestion_drafts = []
+    if is_safe:
+        suggestion_drafts = _extract_suggestion_drafts(
+            user_id,
+            prompt,
+            response_text,
+            recent,
+        )
     message_id = _complete_request(
         user_id,
         session_id,
         client_request_id,
         owner_token,
         response_text,
+        suggestion_drafts,
     )
     return {
         "response": response_text,
         "msg_id": message_id,
+        "suggestions": _message_suggestions(user_id, message_id),
         "sources": [
             {"id": source["id"], "source": source["source"], "title": source["title"]}
             for source in rag_sources
@@ -316,14 +397,29 @@ def _stream_events(
             output_started = True
             yield f"data: {json.dumps({'token': token})}\n\n"
 
+        suggestion_drafts = []
+        if is_safe:
+            suggestion_drafts = _extract_suggestion_drafts(
+                user_id,
+                _latest_user_content(api_messages),
+                approved_text,
+                api_messages,
+            )
         message_id = _complete_request(
             user_id,
             session_id,
             client_request_id,
             owner_token,
             approved_text,
+            suggestion_drafts,
         )
-        yield f"data: {json.dumps({'done': True, 'msg_id': message_id, 'sources': sources_data})}\n\n"
+        done = {
+            "done": True,
+            "msg_id": message_id,
+            "sources": sources_data,
+            "suggestions": _message_suggestions(user_id, message_id),
+        }
+        yield f"data: {json.dumps(done)}\n\n"
     except GeneratorExit:
         _release_request(user_id, session_id, client_request_id, owner_token)
         raise
@@ -364,7 +460,13 @@ def _stream_events(
             else:
                 for token in approved_tokens:
                     yield f"data: {json.dumps({'token': token})}\n\n"
-                yield f"data: {json.dumps({'done': True, 'msg_id': message_id, 'sources': sources_data})}\n\n"
+                done = {
+                    "done": True,
+                    "msg_id": message_id,
+                    "sources": sources_data,
+                    "suggestions": _message_suggestions(user_id, message_id),
+                }
+                yield f"data: {json.dumps(done)}\n\n"
         else:
             _release_request(user_id, session_id, client_request_id, owner_token)
             yield f"data: {json.dumps({'error': '回复生成失败，请稍后重试'})}\n\n"
@@ -411,6 +513,7 @@ def chat(
             "response": replay["content"],
             "msg_id": replay["id"],
             "sources": [],
+            "suggestions": _message_suggestions(user_id, replay["id"]),
             "replayed": True,
         }
 
@@ -468,13 +571,21 @@ def chat_stream(
     if replay:
         def replay_completed():
             replay_text = replay["content"]
+            suggestions = _message_suggestions(user_id, replay["id"])
             is_safe, reason = moderate_text(replay_text, user_id)
             if not is_safe:
                 replay_text = (
                     f"[系统提示] 回复内容已被安全策略拦截（{reason}），请重新提问。"
                 )
             yield f"data: {json.dumps({'token': replay_text})}\n\n"
-            yield f"data: {json.dumps({'done': True, 'msg_id': replay['id'], 'sources': [], 'replayed': True})}\n\n"
+            done = {
+                "done": True,
+                "msg_id": replay["id"],
+                "sources": [],
+                "suggestions": suggestions,
+                "replayed": True,
+            }
+            yield f"data: {json.dumps(done)}\n\n"
 
         return StreamingResponse(replay_completed(), media_type="text/event-stream")
 

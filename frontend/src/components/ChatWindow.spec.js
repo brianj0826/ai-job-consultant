@@ -193,7 +193,7 @@ describe('ChatWindow', () => {
 
     resolveRetry(streamResponse([
       'data: {"token":"完整回复"}\n',
-      'data: {"done":true,"msg_id":31,"sources":[]}\n'
+      'data: {"done":true,"msg_id":31,"sources":[],"suggestions":[{"id":81,"resource_type":"skills","status":"pending","revision":1}]}\n'
     ]))
     await flushPromises()
     await nextTick()
@@ -203,6 +203,9 @@ describe('ChatWindow', () => {
     expect(emittedMessages.filter((message) => message.role === 'user')).toHaveLength(1)
     expect(emittedMessages.filter((message) => message.role === 'assistant')).toHaveLength(1)
     expect(emittedMessages.find((message) => message.role === 'assistant').content).toBe('完整回复')
+    expect(emittedMessages.find((message) => message.role === 'assistant').suggestions).toEqual([
+      { id: 81, resource_type: 'skills', status: 'pending', revision: 1 }
+    ])
     expect(wrapper.text()).toContain('职达 AI 的回复已完成。')
     expect(fetch).toHaveBeenCalledTimes(2)
     const requestBodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body))

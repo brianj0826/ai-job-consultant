@@ -901,6 +901,138 @@ def delete_skill(user_id: int, skill_id: int) -> None:
     _delete("career_skills", skill_id, user_id)
 
 
+def create_suggested_resource_with_cursor(
+    cursor,
+    user_id: int,
+    resource_type: str,
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """Create one validated suggestion target inside the caller's transaction.
+
+    Suggestion acceptance must update its state and create the career resource
+    atomically.  This cursor-level entry point mirrors the public create
+    operations without opening or committing a second connection.
+    """
+    values = dict(values)
+    if resource_type == "resumes":
+        values.setdefault("target_role", "")
+        values.setdefault("source_name", None)
+        values["is_primary"] = False
+        resource_id = _insert(cursor, "career_resumes", {"user_id": user_id, **values})
+        return _serialize(_owned_row(cursor, "career_resumes", resource_id, user_id))
+
+    if resource_type == "jobs":
+        values.setdefault("company", "")
+        values.setdefault("source_url", None)
+        values["status"] = "saved"
+        resource_id = _insert(cursor, "career_jobs", {"user_id": user_id, **values})
+        return _serialize(_owned_row(cursor, "career_jobs", resource_id, user_id))
+
+    if resource_type == "applications":
+        values.setdefault("next_action", "")
+        values.setdefault("deadline", None)
+        values.setdefault("notes", "")
+        values["stage"] = _choice(
+            values.get("stage", "saved"),
+            APPLICATION_STAGES,
+            "application stage",
+        )
+        _owned_row(cursor, "career_jobs", int(values["job_id"]), user_id, columns="id")
+        resource_id = _insert(
+            cursor,
+            "career_applications",
+            {"user_id": user_id, **values},
+        )
+        return _application_row(cursor, user_id, resource_id)
+
+    if resource_type == "interviews":
+        values.setdefault("job_id", None)
+        values["overall_score"] = None
+        values["status"] = "planned"
+        values["completed_at"] = None
+        if values.get("job_id") is not None:
+            _owned_row(cursor, "career_jobs", int(values["job_id"]), user_id, columns="id")
+        resource_id = _insert(cursor, "career_interviews", {"user_id": user_id, **values})
+        return _interview_detail(cursor, user_id, resource_id)
+
+    if resource_type == "reports":
+        values.setdefault("entity_type", None)
+        values.setdefault("entity_id", None)
+        values["kind"] = _choice(values["kind"], REPORT_KINDS, "report kind")
+        values["payload"] = _encode_report_payload(values.get("payload"))
+        entity_type, entity_id = _validate_report_entity(
+            cursor,
+            user_id,
+            values.get("entity_type"),
+            values.get("entity_id"),
+        )
+        values["entity_type"] = entity_type
+        values["entity_id"] = entity_id
+        resource_id = _insert(cursor, "career_reports", {"user_id": user_id, **values})
+        return _serialize(_owned_row(cursor, "career_reports", resource_id, user_id))
+
+    if resource_type == "skills":
+        values.setdefault("target_level", "")
+        values["progress"] = 0
+        values.setdefault("due_date", None)
+        values.setdefault("notes", "")
+        values["status"] = "planned"
+        resource_id = _insert(cursor, "career_skills", {"user_id": user_id, **values})
+        return _serialize(_owned_row(cursor, "career_skills", resource_id, user_id))
+
+    raise CareerDataError(f"Unsupported suggestion resource type: {resource_type}")
+
+
+def create_suggested_interview_questions_with_cursor(
+    cursor,
+    user_id: int,
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """Create an entire suggested question batch or roll it back as one unit."""
+    interview_id = int(values["interview_id"])
+    _owned_row(cursor, "career_interviews", interview_id, user_id, columns="id")
+    cursor.execute(
+        "SELECT position FROM career_interview_questions WHERE interview_id = %s FOR UPDATE",
+        (interview_id,),
+    )
+    used_positions = {int(row["position"]) for row in cursor.fetchall()}
+    next_position = max(used_positions, default=0) + 1
+    created: list[dict[str, Any]] = []
+    for question in values["questions"]:
+        question = dict(question)
+        requested_position = question.pop("position", None)
+        if requested_position is None:
+            while next_position in used_positions:
+                next_position += 1
+            position = next_position
+            next_position += 1
+        else:
+            position = int(requested_position)
+        if position in used_positions:
+            raise CareerConflictError(
+                f"Interview question position {position} already exists"
+            )
+        used_positions.add(position)
+        row = {
+            "interview_id": interview_id,
+            "position": position,
+            "question": question["question"],
+            "answer": "",
+            "score": None,
+            "feedback": "",
+            "reference_answer": question.get("reference_answer", ""),
+            "coaching_notes": question.get("coaching_notes", ""),
+        }
+        question_id = _insert(cursor, "career_interview_questions", row)
+        cursor.execute(
+            "SELECT * FROM career_interview_questions WHERE id = %s",
+            (question_id,),
+        )
+        created.append(_serialize(cursor.fetchone()))
+    _refresh_interview_stats(cursor, interview_id, user_id)
+    return {"interview_id": interview_id, "questions": created}
+
+
 def export_career_data(user_id: int) -> dict[str, Any]:
     """Return all structured career data for a portable user export."""
     connection = get_connection()
@@ -958,6 +1090,13 @@ def export_career_data(user_id: int) -> dict[str, Any]:
                 (user_id,),
             )
             skills = [_serialize(row) for row in cursor.fetchall()]
+            cursor.execute(
+                "SELECT * FROM career_suggestions WHERE user_id = %s ORDER BY created_at DESC",
+                (user_id,),
+            )
+            from backend.services.career_suggestions import serialize_suggestion_row
+
+            suggestions = [serialize_suggestion_row(row) for row in cursor.fetchall()]
         return {
             "exported_at": _utcnow(),
             "resumes": resumes,
@@ -966,6 +1105,7 @@ def export_career_data(user_id: int) -> dict[str, Any]:
             "interviews": interviews,
             "reports": reports,
             "skills": skills,
+            "suggestions": suggestions,
         }
     finally:
         connection.close()
@@ -976,6 +1116,7 @@ def delete_career_data(user_id: int) -> dict[str, int]:
     connection = get_connection()
     counts: dict[str, int] = {}
     tables = (
+        "career_suggestions",
         "career_reports",
         "career_skills",
         "career_resumes",

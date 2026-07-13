@@ -181,6 +181,64 @@ export const careerNavigation = [
   { routeName: 'career-skills', label: '技能计划', resource: 'skills' }
 ]
 
+export const suggestionResourceDefinitions = {
+  resumes: {
+    label: '简历',
+    sectionLabel: '简历中心',
+    routeName: 'career-resumes',
+    definition: careerResourceDefinitions.resumes,
+    editableFields: ['title', 'target_role', 'content', 'source_name']
+  },
+  jobs: {
+    label: '岗位',
+    sectionLabel: '岗位库',
+    routeName: 'career-jobs',
+    definition: careerResourceDefinitions.jobs,
+    editableFields: ['title', 'company', 'description', 'source_url']
+  },
+  applications: {
+    label: '投递',
+    sectionLabel: '投递工作台',
+    routeName: 'career-applications',
+    definition: careerResourceDefinitions.applications,
+    editableFields: ['job_id', 'stage', 'next_action', 'deadline', 'notes']
+  },
+  interviews: {
+    label: '面试',
+    sectionLabel: '面试中心',
+    routeName: 'career-interviews',
+    definition: careerResourceDefinitions.interviews,
+    editableFields: ['job_id', 'title']
+  },
+  reports: {
+    label: '报告',
+    sectionLabel: '报告中心',
+    routeName: 'career-reports',
+    definition: careerResourceDefinitions.reports,
+    editableFields: ['kind', 'title', 'entity_type', 'entity_id', 'summary', 'payload']
+  },
+  skills: {
+    label: '技能计划',
+    sectionLabel: '技能计划',
+    routeName: 'career-skills',
+    definition: careerResourceDefinitions.skills,
+    editableFields: ['skill', 'target_level', 'due_date', 'notes']
+  },
+  interview_questions: {
+    label: '面试题',
+    sectionLabel: '面试中心',
+    routeName: 'career-interviews',
+    editableFields: ['interview_id', 'questions']
+  }
+}
+
+export const getSuggestionFields = (resourceType) => {
+  const suggestion = suggestionResourceDefinitions[resourceType]
+  if (!suggestion?.definition) return []
+  const allowed = new Set(suggestion.editableFields)
+  return suggestion.definition.fields.filter((field) => allowed.has(field.key))
+}
+
 export const getOptionLabel = (options = [], value) => (
   options.find((option) => option.value === value)?.label || value || '未设置'
 )

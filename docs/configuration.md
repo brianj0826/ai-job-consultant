@@ -8,6 +8,9 @@
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | 无 | DeepSeek 密钥；正常运行必填 |
 | `DEEPSEEK_API_URL` | `https://api.deepseek.com/chat/completions` | OpenAI 兼容聊天端点；测试可指向 mock |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 普通回答、工具调用与职业建议提取使用的模型 |
+| `CAREER_SUGGESTIONS_ENABLED` | `true` | 是否从已审核 AI 回复中生成新的职业数据建议；关闭后已有建议仍可处理 |
+| `CAREER_SUGGESTION_TIMEOUT_SECONDS` | `8` | 独立建议提取调用的超时秒数；失败时降级为空建议，不中断聊天 |
 | `RAG_DISABLED` | `false` | 仅受控测试/CI 使用；生产保持 `false` |
 | `CHROMA_DB_PATH` | 直接运行 `./chroma_db`；Compose 固定为容器内 `/app/chroma_db` | Chroma 持久目录；Compose 固定值与 bind mount 对齐，直接运行时可覆盖 |
 | `RAG_CHUNK_SIZE` | `500` | 文本分块字符数 |

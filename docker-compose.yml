@@ -47,6 +47,9 @@ services:
       - CHAT_REQUEST_LEASE_SECONDS=${CHAT_REQUEST_LEASE_SECONDS:-300}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DEEPSEEK_API_URL=${DEEPSEEK_API_URL:-https://api.deepseek.com/chat/completions}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      - CAREER_SUGGESTIONS_ENABLED=${CAREER_SUGGESTIONS_ENABLED:-true}
+      - CAREER_SUGGESTION_TIMEOUT_SECONDS=${CAREER_SUGGESTION_TIMEOUT_SECONDS:-8}
       - RAG_DISABLED=${RAG_DISABLED:-false}
       # Keep the runtime path aligned with the bind mount above. Direct local
       # runs may use CHROMA_DB_PATH from .env instead.

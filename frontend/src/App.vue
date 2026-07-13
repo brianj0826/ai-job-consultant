@@ -134,6 +134,7 @@
               @kb-updated="sidebarRef?.loadDocStatus()"
               @retry-session="handleRetrySession"
               @request-document-upload="sidebarRef?.openDocumentPicker()"
+              @suggestion-update="handleSuggestionUpdate"
             />
           </Transition>
         </main>
@@ -409,6 +410,8 @@ const loadSessionMessages = async (sessionId, { navigate = true } = {}) => {
       content: m.content,
       id: m.id,
       feedback: m.feedback,
+      sources: Array.isArray(m.sources) ? m.sources : [],
+      suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
       timestamp: m.timestamp
     }))
     sessionStatus.value = 'ready'
@@ -463,6 +466,18 @@ const handleSendMessage = (newMessages) => {
   messages.value = [...messages.value, ...newMessages]
   const last = newMessages[newMessages.length - 1]
   if (last?.role === 'assistant') lastAIResponse.value = last.content
+}
+
+const handleSuggestionUpdate = ({ sessionId, messageId, suggestion }) => {
+  if (sessionId !== currentSessionId.value || !suggestion?.id) return
+  messages.value = messages.value.map((message) => {
+    if (String(message.id) !== String(messageId)) return message
+    const current = Array.isArray(message.suggestions) ? message.suggestions : []
+    const suggestions = current.map((item) => (
+      String(item.id) === String(suggestion.id) ? { ...item, ...suggestion } : item
+    ))
+    return { ...message, suggestions }
+  })
 }
 
 const handleQuickChat = (text) => {

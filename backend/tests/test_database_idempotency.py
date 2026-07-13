@@ -3,6 +3,7 @@ import pytest
 from datetime import datetime, timedelta
 
 from backend.services import database
+from backend.services import career_suggestions
 
 
 class _FakeCursor:
@@ -172,6 +173,79 @@ def test_stale_owner_cannot_complete_reclaimed_request(monkeypatch):
     monkeypatch.setattr(database, "get_connection", lambda: connection)
     with pytest.raises(database.ChatRequestOwnershipError):
         database.complete_chat_request(1, 2, "request-lease", "old-owner", "answer")
+
+
+class _CompleteCursor:
+    def __init__(self):
+        self._result = None
+        self.rowcount = 0
+        self.lastrowid = 41
+        self.executions = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executions.append((sql, params))
+        if "FROM chat_requests" in sql and "FOR UPDATE" in sql:
+            self._result = {
+                "id": 4,
+                "status": "processing",
+                "owner_token": "current-owner",
+                "response_message_id": None,
+            }
+        elif "INSERT INTO messages" in sql:
+            self._result = None
+        elif "UPDATE chat_requests" in sql:
+            self.rowcount = 1
+            self._result = None
+
+    def fetchone(self):
+        return self._result
+
+
+def test_complete_chat_request_saves_suggestions_in_the_completion_transaction(
+    monkeypatch,
+):
+    cursor = _CompleteCursor()
+    connection = _FakeConnection(cursor)
+    commits = []
+    connection.commit = lambda: commits.append("commit")
+    inserted = []
+    monkeypatch.setattr(database, "get_connection", lambda: connection)
+    monkeypatch.setattr(
+        career_suggestions,
+        "insert_suggestions_with_cursor",
+        lambda used_cursor, user_id, session_id, message_id, drafts: inserted.append(
+            (used_cursor, user_id, session_id, message_id, drafts)
+        ),
+    )
+    drafts = [{"resource_type": "skills", "payload": {"skill": "Redis"}}]
+
+    message_id = database.complete_chat_request(
+        1,
+        2,
+        "request-lease",
+        "current-owner",
+        "answer",
+        suggestions=drafts,
+    )
+
+    assert message_id == 41
+    assert inserted == [(cursor, 1, 2, 41, drafts)]
+    assert commits == ["commit"]
+    insert_index = next(
+        index for index, (sql, _) in enumerate(cursor.executions)
+        if "INSERT INTO messages" in sql
+    )
+    completion_index = next(
+        index for index, (sql, _) in enumerate(cursor.executions)
+        if "UPDATE chat_requests" in sql
+    )
+    assert insert_index < completion_index
 
 
 def test_stale_owner_release_does_not_delete_new_owner_messages(monkeypatch):

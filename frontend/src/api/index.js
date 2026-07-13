@@ -88,6 +88,21 @@ export const exportCareerData = () => api.get('/api/career/export')
 export const deleteCareerData = () =>
   api.delete('/api/career/data', { data: { confirmation: 'DELETE' } })
 
+// AI career suggestions. These endpoints only update a persisted draft or
+// confirm a server-validated action; suggestion cards never call the generic
+// career create endpoint directly.
+export const updateCareerSuggestion = (suggestionId, revision, payload) =>
+  api.patch(`/api/career/suggestions/${suggestionId}`, { revision, payload })
+
+export const acceptCareerSuggestion = (suggestionId, revision) =>
+  api.post(`/api/career/suggestions/${suggestionId}/accept`, { revision })
+
+export const dismissCareerSuggestion = (suggestionId, revision) =>
+  api.post(`/api/career/suggestions/${suggestionId}/dismiss`, { revision })
+
+export const restoreCareerSuggestion = (suggestionId, revision) =>
+  api.post(`/api/career/suggestions/${suggestionId}/restore`, { revision })
+
 // Feedback
 export const submitFeedback = (msgId, feedback) =>
   api.post('/api/feedback/', { msg_id: msgId, feedback })

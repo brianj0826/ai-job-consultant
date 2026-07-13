@@ -277,6 +277,8 @@
           <div class="question-item__index tabular-nums">{{ question.position }}</div>
           <div class="question-item__content">
             <h4>{{ question.question }}</h4>
+            <p v-if="question.reference_answer"><strong>AI 参考答案：</strong>{{ question.reference_answer }}</p>
+            <p v-if="question.coaching_notes"><strong>解题思路：</strong>{{ question.coaching_notes }}</p>
             <p v-if="question.answer"><strong>回答：</strong>{{ question.answer }}</p>
             <p v-if="question.feedback"><strong>反馈：</strong>{{ question.feedback }}</p>
             <span v-if="question.score !== null && question.score !== undefined" class="question-item__score">
@@ -302,6 +304,10 @@
         <el-input id="interview-question" v-model="questionForm.question" type="textarea" :rows="3" />
         <label for="interview-answer">回答</label>
         <el-input id="interview-answer" v-model="questionForm.answer" type="textarea" :rows="5" />
+        <label for="interview-reference-answer">AI 参考答案</label>
+        <el-input id="interview-reference-answer" v-model="questionForm.reference_answer" type="textarea" :rows="5" />
+        <label for="interview-coaching-notes">解题思路与辅导建议</label>
+        <el-input id="interview-coaching-notes" v-model="questionForm.coaching_notes" type="textarea" :rows="4" />
         <label for="interview-feedback">反馈</label>
         <el-input id="interview-feedback" v-model="questionForm.feedback" type="textarea" :rows="4" />
         <label for="interview-score">评分（0–100）</label>
@@ -379,7 +385,14 @@ const questionEditorOpen = ref(false)
 const editingQuestionId = ref(null)
 const questionSaving = ref(false)
 const questionError = ref('')
-const questionForm = reactive({ question: '', answer: '', feedback: '', score: '' })
+const questionForm = reactive({
+  question: '',
+  answer: '',
+  reference_answer: '',
+  coaching_notes: '',
+  feedback: '',
+  score: ''
+})
 const exportingData = ref(false)
 const clearingData = ref(false)
 let loadRequestId = 0
@@ -647,6 +660,8 @@ const openQuestionEditor = (question = null) => {
   Object.assign(questionForm, {
     question: question?.question || '',
     answer: question?.answer || '',
+    reference_answer: question?.reference_answer || '',
+    coaching_notes: question?.coaching_notes || '',
     feedback: question?.feedback || '',
     score: question?.score ?? ''
   })
@@ -675,6 +690,8 @@ const saveQuestion = async () => {
   const payload = {
     question,
     answer: questionForm.answer.trim(),
+    reference_answer: questionForm.reference_answer.trim(),
+    coaching_notes: questionForm.coaching_notes.trim(),
     feedback: questionForm.feedback.trim(),
     score
   }

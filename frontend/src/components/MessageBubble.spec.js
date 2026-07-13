@@ -17,7 +17,12 @@ const globalStubs = {
     template: '<button type="button" @click="$emit(\'click\')"><slot /></button>'
   },
   ElIcon: { template: '<span><slot /></span>' },
-  ElTag: { template: '<span><slot /></span>' }
+  ElTag: { template: '<span><slot /></span>' },
+  CareerSuggestionCard: {
+    props: ['suggestion'],
+    emits: ['update'],
+    template: '<button class="suggestion-stub" @click="$emit(\'update\', { ...suggestion, status: \'accepted\' })">建议</button>'
+  }
 }
 
 describe('MessageBubble', () => {
@@ -75,5 +80,25 @@ describe('MessageBubble', () => {
       tabindex: '0',
       'aria-label': '数据表格，可横向滚动'
     })
+  })
+
+  it('renders assistant suggestions and identifies immutable updates by message id', async () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          id: 17,
+          role: 'assistant',
+          content: '建议你保存技能计划。',
+          suggestions: [{ id: 91, resource_type: 'skills', status: 'pending', revision: 1 }]
+        }
+      },
+      global: { stubs: globalStubs }
+    })
+
+    await wrapper.get('.suggestion-stub').trigger('click')
+    expect(wrapper.emitted('suggestion-update')[0]).toEqual([
+      17,
+      { id: 91, resource_type: 'skills', status: 'accepted', revision: 1 }
+    ])
   })
 })

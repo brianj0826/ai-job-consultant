@@ -45,6 +45,60 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"detail": "invalid JSON"})
             return
 
+        tool_choice = payload.get("tool_choice")
+        forced_function = (
+            tool_choice.get("function", {}).get("name")
+            if isinstance(tool_choice, dict)
+            else None
+        )
+        if forced_function == "propose_career_suggestions":
+            arguments = {
+                "suggestions": [
+                    {
+                        "resource_type": "skills",
+                        "title": "添加 Redis 技能计划",
+                        "reason": "目标岗位需要缓存与限流能力",
+                        "intent": "explicit",
+                        "confidence": 0.99,
+                        "payload": {
+                            "skill": "Redis",
+                            "target_level": "能够完成生产环境缓存与限流设计",
+                            "status": "planned",
+                            "progress": 0,
+                            "notes": "Docker mock suggestion",
+                        },
+                        "relation_hints": {},
+                    }
+                ]
+            }
+            self._json(
+                200,
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "tool_calls",
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": "career-suggestion-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "propose_career_suggestions",
+                                            "arguments": json.dumps(
+                                                arguments, ensure_ascii=False
+                                            ),
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                },
+            )
+            return
+
         if payload.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")

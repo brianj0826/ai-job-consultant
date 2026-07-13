@@ -98,6 +98,10 @@ describe('frontend API contract', () => {
     api.createInterviewQuestion(3, { question: '请介绍一个项目' })
     api.updateInterviewQuestion(3, 11, { score: 90 })
     api.deleteInterviewQuestion(3, 11)
+    api.updateCareerSuggestion(21, 2, { skill: 'Redis', progress: 0 })
+    api.acceptCareerSuggestion(21, 3)
+    api.dismissCareerSuggestion(22, 1)
+    api.restoreCareerSuggestion(22, 2)
 
     expect(request.get).toHaveBeenCalledWith('/api/career/resumes', {
       params: { status: 'active' }
@@ -113,6 +117,13 @@ describe('frontend API contract', () => {
       score: 90
     })
     expect(request.delete).toHaveBeenCalledWith('/api/career/interviews/3/questions/11')
+    expect(request.patch).toHaveBeenCalledWith('/api/career/suggestions/21', {
+      revision: 2,
+      payload: { skill: 'Redis', progress: 0 }
+    })
+    expect(request.post).toHaveBeenCalledWith('/api/career/suggestions/21/accept', { revision: 3 })
+    expect(request.post).toHaveBeenCalledWith('/api/career/suggestions/22/dismiss', { revision: 1 })
+    expect(request.post).toHaveBeenCalledWith('/api/career/suggestions/22/restore', { revision: 2 })
   })
 
   it('requires the server-side confirmation contract when clearing career data', () => {
